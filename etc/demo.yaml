@@ -1,6 +1,19 @@
-Name: demo.rpc
-ListenOn: 0.0.0.0:8080
-Etcd:
-  Hosts:
-  - 127.0.0.1:2379
-  Key: demo.rpc
+Name: demo-api
+Host: 0.0.0.0
+Port: 8888
+
+Postgres:
+  DSN: "postgres://admin:123456@localhost:5432/testdb?sslmode=disable"
+
+Lifi:
+  ApiUrl: "https://li.quest/v1"
+
+Chains:
+  BSC:
+    Name: "Binance Smart Chain Testnet"
+    RpcUrl: "https://bsc-testnet-rpc.publicnode.com"
+    ChainId: 97
+  ETH:
+    Name: "Ethereum Mainnet"
+    RpcUrl: "https://mainnet.infura.io/v3/your-infura-id"
+    ChainId: 1

@@ -4,13 +4,15 @@ type Chain string
 
 const (
 	ChainETH Chain = "ETH"
+	ChainBSC Chain = "BSC"
 	// ChainBTC Chain = "BTC" // Example for future support
 	// ChainSOL Chain = "SOL" // Example for future support
 )
 
 // SupportedChains lists all chains that are currently supported for wallet initialization.
 var SupportedChains = []Chain{
-	ChainETH,
+	//ChainETH,
+	ChainBSC,
 }
 
 // IsChainSupported checks if a given chain is in the list of supported chains.
