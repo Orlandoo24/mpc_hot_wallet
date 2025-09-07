@@ -32,12 +32,22 @@ func RegisterHandlers(server *rest.Server, serverCtx *svc.ServiceContext) {
 			{
 				Method:  http.MethodPost,
 				Path:    "/transaction/approve",
-				Handler: NotImplementedHandler(),
+				Handler: ApproveHandler(serverCtx),
 			},
 			{
 				Method:  http.MethodPost,
 				Path:    "/transaction/revoke",
-				Handler: NotImplementedHandler(),
+				Handler: RevokeHandler(serverCtx),
+			},
+			{
+				Method:  http.MethodPost,
+				Path:    "/transaction/check_allowance",
+				Handler: CheckAllowanceHandler(serverCtx),
+			},
+			{
+				Method:  http.MethodPost,
+				Path:    "/transaction/user_approvals",
+				Handler: GetUserApprovalsHandler(serverCtx),
 			},
 			{
 				Method:  http.MethodGet, // Receive is typically a GET request to fetch address/info
@@ -59,6 +69,11 @@ func RegisterHandlers(server *rest.Server, serverCtx *svc.ServiceContext) {
 				Method:  http.MethodPost,
 				Path:    "/bridge/execute",
 				Handler: BridgeHandler(serverCtx),
+			},
+			{
+				Method:  http.MethodPost,
+				Path:    "/bridge/wrap",
+				Handler: WrapBridgeHandler(serverCtx),
 			},
 			{
 				Method:  http.MethodPost,

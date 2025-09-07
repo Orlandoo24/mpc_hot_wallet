@@ -70,7 +70,7 @@ func (l *TransactionLogic) isValidSwapOperation(req *types.TransactionReq) bool 
 		}
 	}
 
-	// 原生代币到原生代币的同链操作不是 swap
+	// 原生代币到原生代币的同链操作不是 swap ，同链操作 lifi 会报错
 	if isFromNative && isToNative {
 		l.Infof("检测到原生代币到原生代币操作，不是有效的 swap")
 		return false
@@ -81,35 +81,8 @@ func (l *TransactionLogic) isValidSwapOperation(req *types.TransactionReq) bool 
 	return true
 }
 
-// LifiQuoteResponse LI.FI 报价响应结构
-type LifiQuoteResponse struct {
-	ID       string `json:"id"`
-	Type     string `json:"type"`
-	Tool     string `json:"tool"`
-	Estimate struct {
-		FromAmount      string `json:"fromAmount"`
-		ToAmount        string `json:"toAmount"`
-		ToAmountMin     string `json:"toAmountMin"`
-		ApprovalAddress string `json:"approvalAddress"`
-		GasCosts        []struct {
-			Type     string `json:"type"`
-			Price    string `json:"price"`
-			Estimate string `json:"estimate"`
-			Limit    string `json:"limit"`
-			Token    string `json:"token"`
-		} `json:"gasCosts"`
-	} `json:"estimate"`
-	TransactionRequest struct {
-		Data     string `json:"data"`
-		To       string `json:"to"`
-		Value    string `json:"value"`
-		GasLimit string `json:"gasLimit"`
-		GasPrice string `json:"gasPrice"`
-	} `json:"transactionRequest"`
-}
-
 // getLifiQuote 获取 LI.FI 优化报价
-func (l *TransactionLogic) getLifiQuote(req *types.TransactionReq) (*LifiQuoteResponse, error) {
+func (l *TransactionLogic) getLifiQuote(req *types.TransactionReq) (*types.LifiQuoteResponse, error) {
 	l.Infof("获取 LI.FI 优化报价...")
 
 	// 强制使用 BSC 主网配置
@@ -133,7 +106,7 @@ func (l *TransactionLogic) getLifiQuote(req *types.TransactionReq) (*LifiQuoteRe
 	params.Set("slippage", "0.005")         // 0.5% 滑点保护
 	params.Set("skipSimulation", "false")   // 保持模拟以获得精确 gas 估算
 	params.Set("allowSwitchChain", "false") // 禁止链切换
-	params.Set("fee", "0.001")              // 0.1% 集成费用
+	// 注意：要收集费用需要先在 https://portal.li.fi/ 注册集成商并配置费用钱包
 
 	// 时间策略优化 - 最小等待时间 600 秒，最多重试 4 次，间隔 300 秒
 	params.Set("routeTimingStrategies", "minWaitTime-600-4-300")
@@ -178,7 +151,7 @@ func (l *TransactionLogic) getLifiQuote(req *types.TransactionReq) (*LifiQuoteRe
 		return nil, fmt.Errorf("读取响应失败: %v", err)
 	}
 
-	var quote LifiQuoteResponse
+	var quote types.LifiQuoteResponse
 	if err := json.Unmarshal(body, &quote); err != nil {
 		return nil, fmt.Errorf("解析报价响应失败: %v", err)
 	}
@@ -195,7 +168,7 @@ func (l *TransactionLogic) getLifiQuote(req *types.TransactionReq) (*LifiQuoteRe
 }
 
 // executeOptimizedSwap 执行优化的 approve + swap 流程
-func (l *TransactionLogic) executeOptimizedSwap(req *types.TransactionReq, quote *LifiQuoteResponse) (resp *types.TransactionResp, err error) {
+func (l *TransactionLogic) executeOptimizedSwap(req *types.TransactionReq, quote *types.LifiQuoteResponse) (resp *types.TransactionResp, err error) {
 	l.Infof("=== 执行 LI.FI 优化的 Swap 流程 ===")
 
 	// 获取链配置
@@ -282,7 +255,7 @@ func (l *TransactionLogic) normalizeTokenAddress(tokenAddr string) string {
 }
 
 // executeSwapTransaction 执行 LI.FI 优化的 swap 交易
-func (l *TransactionLogic) executeSwapTransaction(client *ethclient.Client, privateKey *ecdsa.PrivateKey, quote *LifiQuoteResponse, chainId int64) (string, error) {
+func (l *TransactionLogic) executeSwapTransaction(client *ethclient.Client, privateKey *ecdsa.PrivateKey, quote *types.LifiQuoteResponse, chainId int64) (string, error) {
 	l.Infof("执行 LI.FI 优化的 swap 交易")
 
 	// 解析 LI.FI 提供的交易参数

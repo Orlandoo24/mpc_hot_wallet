@@ -11,7 +11,7 @@ Lifi:
 Chains:
   BSC:
     Name: "Binance Smart Chain Mainnet"
-    RpcUrl: "https://bsc-dataseed.binance.org"
+    RpcUrl: "https://bsc-rpc.publicnode.com"
     ChainId: 56
   BSC-TestNet:
     Name: "Binance Smart Chain Testnet"

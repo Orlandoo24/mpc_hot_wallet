@@ -54,34 +54,55 @@ func (l *BridgeLogic) GetBridgeQuote(req *types.BridgeQuoteReq) (*types.BridgeQu
 	params := url.Values{}
 	params.Set("fromChain", strconv.Itoa(req.FromChain))
 	params.Set("toChain", strconv.Itoa(req.ToChain))
-	params.Set("fromToken", req.FromToken)
-	params.Set("toToken", req.ToToken)
+	params.Set("fromToken", l.normalizeTokenAddress(req.FromToken))
+	params.Set("toToken", l.normalizeTokenAddress(req.ToToken))
 	params.Set("fromAmount", req.FromAmount)
 	params.Set("fromAddress", req.FromAddress)
 	params.Set("toAddress", req.ToAddress)
+	params.Set("integrator", "mpc-demo") // 集成商标识
 
-	// 设置默认参数
+	// LI.FI 最佳实践优化参数
 	if req.Order != "" {
 		params.Set("order", req.Order)
 	} else {
-		params.Set("order", "FASTEST") // 默认选择最快的路径
+		params.Set("order", "FASTEST") // 优先选择最快路由
 	}
 
 	if req.Slippage != "" {
 		params.Set("slippage", req.Slippage)
 	} else {
-		params.Set("slippage", "0.005") // 默认 0.5% 滑点
+		params.Set("slippage", "0.005") // 0.5% 滑点保护
 	}
 
+	// 添加 LI.FI 最佳实践参数
+	params.Set("skipSimulation", "false")   // 保持模拟以获得精确 gas 估算
+	params.Set("allowSwitchChain", "false") // 禁止链切换
+	// 注意：要收集费用需要先在 https://portal.li.fi/ 注册集成商并配置费用钱包
+
+	// 时间策略优化 - 最小等待时间 600 秒，最多重试 4 次，间隔 300 秒
+	params.Set("routeTimingStrategies", "minWaitTime-600-4-300")
+	params.Set("bridgeStepTimingStrategies", "minWaitTime-600-4-300")
+
 	// 调用 LI.FI API
-	apiURL := "https://li.quest/v1/quote?" + params.Encode()
+	apiURL := l.svcCtx.Config.Lifi.ApiUrl + "/quote?" + params.Encode()
 	l.Infof("调用 LI.FI API: %s", apiURL)
 
+	// 创建 HTTP 客户端，设置超时
 	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Get(apiURL)
+
+	req_http, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("创建请求失败: %v", err)
+	}
+
+	// 添加用户代理
+	req_http.Header.Set("User-Agent", "MPC-Demo/1.0")
+	// 注意：如果需要 API 密钥，可以在配置中添加并在这里使用
+
+	resp, err := client.Do(req_http)
 	if err != nil {
 		l.Errorf("LI.FI API 调用失败: %v", err)
-		return nil, errors.New("failed to call LI.FI API")
+		return nil, fmt.Errorf("LI.FI API 调用失败: %v", err)
 	}
 	defer resp.Body.Close()
 
@@ -212,14 +233,27 @@ func (l *BridgeLogic) GetBridgeStatus(req *types.BridgeStatusReq) (*types.Bridge
 	l.Infof("--- 查询跨链状态 txHash=%s ---", req.TxHash)
 
 	// 调用 LI.FI 状态查询 API
-	apiURL := "https://li.quest/v1/status?txHash=" + req.TxHash
+	params := url.Values{}
+	params.Set("txHash", req.TxHash)
+
+	apiURL := l.svcCtx.Config.Lifi.ApiUrl + "/status?" + params.Encode()
 	l.Infof("调用 LI.FI 状态 API: %s", apiURL)
 
+	// 创建 HTTP 客户端，设置超时
 	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Get(apiURL)
+
+	req_http, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("创建状态查询请求失败: %v", err)
+	}
+
+	// 添加用户代理
+	req_http.Header.Set("User-Agent", "MPC-Demo/1.0")
+
+	resp, err := client.Do(req_http)
 	if err != nil {
 		l.Errorf("LI.FI 状态 API 调用失败: %v", err)
-		return nil, errors.New("failed to call LI.FI status API")
+		return nil, fmt.Errorf("LI.FI 状态 API 调用失败: %v", err)
 	}
 	defer resp.Body.Close()
 
@@ -329,7 +363,13 @@ func (l *BridgeLogic) executeApprove(client *ethclient.Client, req *types.Bridge
 
 	err = client.SendTransaction(l.ctx, signedTx)
 	if err != nil {
-		return fmt.Errorf("failed to send approve transaction: %v", err)
+		// 检查错误信息中是否包含交易哈希（有些 RPC 节点会在错误信息中返回成功的交易哈希）
+		if strings.Contains(err.Error(), "result") && strings.Contains(err.Error(), "0x") {
+			l.Infof("⚠️ RPC 返回误导性错误，但交易可能已成功发送: %v", err)
+			l.Infof("使用本地计算的交易哈希继续流程: %s", signedTx.Hash().Hex())
+		} else {
+			return fmt.Errorf("failed to send approve transaction: %v", err)
+		}
 	}
 
 	l.Infof("✅ Approve 交易已发送: %s", signedTx.Hash().Hex())
@@ -455,7 +495,13 @@ func (l *BridgeLogic) sendBridgeTransaction(client *ethclient.Client, txReq type
 	// 发送交易
 	err = client.SendTransaction(l.ctx, signedTx)
 	if err != nil {
-		return "", fmt.Errorf("failed to send transaction: %v", err)
+		// 检查错误信息中是否包含交易哈希（有些 RPC 节点会在错误信息中返回成功的交易哈希）
+		if strings.Contains(err.Error(), "result") && strings.Contains(err.Error(), "0x") {
+			l.Infof("⚠️ RPC 返回误导性错误，但交易可能已成功发送: %v", err)
+			l.Infof("使用本地计算的交易哈希继续流程: %s", signedTx.Hash().Hex())
+		} else {
+			return "", fmt.Errorf("failed to send transaction: %v", err)
+		}
 	}
 
 	l.Infof("✅ 跨链交易已发送: %s", signedTx.Hash().Hex())
@@ -724,12 +770,23 @@ func (l *BridgeLogic) GetBridgeStatusWithPolling(txHash string, maxAttempts int)
 func (l *BridgeLogic) GetSupportedChains() ([]ChainInfo, error) {
 	l.Infof("获取支持的链列表")
 
-	apiURL := "https://li.quest/v1/chains"
+	apiURL := l.svcCtx.Config.Lifi.ApiUrl + "/chains"
+
+	// 创建 HTTP 客户端，设置超时
 	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Get(apiURL)
+
+	req_http, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("创建请求失败: %v", err)
+	}
+
+	// 添加用户代理
+	req_http.Header.Set("User-Agent", "MPC-Demo/1.0")
+
+	resp, err := client.Do(req_http)
 	if err != nil {
 		l.Errorf("获取链列表失败: %v", err)
-		return nil, errors.New("failed to get supported chains")
+		return nil, fmt.Errorf("获取链列表失败: %v", err)
 	}
 	defer resp.Body.Close()
 
@@ -753,6 +810,14 @@ func (l *BridgeLogic) GetSupportedChains() ([]ChainInfo, error) {
 	return chainsResp.Chains, nil
 }
 
+// normalizeTokenAddress 标准化代币地址（转换为 LI.FI 格式）
+func (l *BridgeLogic) normalizeTokenAddress(tokenAddr string) string {
+	if tokenAddr == "0x0000000000000000000000000000000000000000" {
+		return "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE" // LI.FI 原生代币标识
+	}
+	return tokenAddr
+}
+
 // GetSupportedTokens 获取支持的代币列表
 func (l *BridgeLogic) GetSupportedTokens(chainIds []int) (map[int][]TokenInfo, error) {
 	l.Infof("获取支持的代币列表")
@@ -766,12 +831,23 @@ func (l *BridgeLogic) GetSupportedTokens(chainIds []int) (map[int][]TokenInfo, e
 		params.Set("chains", strings.Join(chainStrs, ","))
 	}
 
-	apiURL := "https://li.quest/v1/tokens?" + params.Encode()
+	apiURL := l.svcCtx.Config.Lifi.ApiUrl + "/tokens?" + params.Encode()
+
+	// 创建 HTTP 客户端，设置超时
 	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Get(apiURL)
+
+	req_http, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("创建请求失败: %v", err)
+	}
+
+	// 添加用户代理
+	req_http.Header.Set("User-Agent", "MPC-Demo/1.0")
+
+	resp, err := client.Do(req_http)
 	if err != nil {
 		l.Errorf("获取代币列表失败: %v", err)
-		return nil, errors.New("failed to get supported tokens")
+		return nil, fmt.Errorf("获取代币列表失败: %v", err)
 	}
 	defer resp.Body.Close()
 

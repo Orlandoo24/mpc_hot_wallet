@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"strings"
 	"time"
 
 	"github.com/ethereum/go-ethereum"
@@ -135,7 +136,13 @@ func (l *TransactionLogic) BuildAndSendTransaction(client *ethclient.Client, pri
 	// 发送交易
 	err = client.SendTransaction(l.ctx, signedTx)
 	if err != nil {
-		return "", fmt.Errorf("failed to send transaction: %v", err)
+		// 检查错误信息中是否包含交易哈希（有些 RPC 节点会在错误信息中返回成功的交易哈希）
+		if strings.Contains(err.Error(), "result") && strings.Contains(err.Error(), "0x") {
+			l.Infof("⚠️ RPC 返回误导性错误，但交易可能已成功发送: %v", err)
+			l.Infof("使用本地计算的交易哈希继续流程: %s", signedTx.Hash().Hex())
+		} else {
+			return "", fmt.Errorf("failed to send transaction: %v", err)
+		}
 	}
 
 	return signedTx.Hash().Hex(), nil
@@ -204,14 +211,31 @@ func (l *TransactionLogic) CheckAllowance(client *ethclient.Client, tokenAddress
 	data := append(allowanceMethodId, paddedOwner...)
 	data = append(data, paddedSpender...)
 
-	// 调用合约
+	// 调用合约（带重试机制）
 	tokenAddr := common.HexToAddress(tokenAddress)
-	result, err := client.CallContract(l.ctx, ethereum.CallMsg{
-		To:   &tokenAddr,
-		Data: data,
-	}, nil)
+
+	var result []byte
+	var err error
+	maxRetries := 3
+
+	for i := 0; i < maxRetries; i++ {
+		result, err = client.CallContract(l.ctx, ethereum.CallMsg{
+			To:   &tokenAddr,
+			Data: data,
+		}, nil)
+
+		if err == nil {
+			break
+		}
+
+		l.Infof("Allowance 查询失败 (尝试 %d/%d): %v", i+1, maxRetries, err)
+		if i < maxRetries-1 {
+			time.Sleep(time.Duration(i+1) * time.Second) // 递增延迟
+		}
+	}
+
 	if err != nil {
-		return nil, fmt.Errorf("failed to call allowance: %v", err)
+		return nil, fmt.Errorf("failed to call allowance after %d retries: %v", maxRetries, err)
 	}
 
 	// 解析结果
