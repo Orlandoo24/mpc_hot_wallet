@@ -27,7 +27,7 @@ func RegisterHandlers(server *rest.Server, serverCtx *svc.ServiceContext) {
 			{
 				Method:  http.MethodPost,
 				Path:    "/transaction/send",
-				Handler: TransactionSendHandler(serverCtx),
+				Handler: SendHandler(serverCtx),
 			},
 			{
 				Method:  http.MethodPost,
@@ -47,12 +47,23 @@ func RegisterHandlers(server *rest.Server, serverCtx *svc.ServiceContext) {
 			{
 				Method:  http.MethodPost,
 				Path:    "/transaction/swap",
-				Handler: NotImplementedHandler(),
+				Handler: SwapHandler(serverCtx),
+			},
+			// --- Bridge Routes ---
+			{
+				Method:  http.MethodPost,
+				Path:    "/bridge/quote",
+				Handler: BridgeQuoteHandler(serverCtx),
 			},
 			{
 				Method:  http.MethodPost,
-				Path:    "/transaction/bridge",
-				Handler: NotImplementedHandler(),
+				Path:    "/bridge/execute",
+				Handler: BridgeHandler(serverCtx),
+			},
+			{
+				Method:  http.MethodPost,
+				Path:    "/bridge/status",
+				Handler: BridgeStatusHandler(serverCtx),
 			},
 		},
 		rest.WithPrefix("/api/"),

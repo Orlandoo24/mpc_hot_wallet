@@ -2,12 +2,9 @@ package handler
 
 import (
 	"demo/internal/logic"
-	"demo/internal/logic/transaction"
 	"demo/internal/svc"
 	"demo/internal/types"
 	"net/http"
-
-	"github.com/zeromicro/go-zero/core/logx"
 
 	"github.com/zeromicro/go-zero/rest/httpx"
 )
@@ -31,32 +28,9 @@ func WalletInitHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 	}
 }
 
-func TransactionSendHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
-
-	return func(w http.ResponseWriter, r *http.Request) {
-
-		logx.WithContext(r.Context()).Infof("TransactionSendHandler")
-		var req types.TransactionSendReq
-		if err := httpx.Parse(r, &req); err != nil {
-			logx.WithContext(r.Context()).Errorf("failed to parse request body: %v", err)
-			httpx.ErrorCtx(r.Context(), w, err)
-			return
-		}
-		logx.WithContext(r.Context()).Infof("Request body parsed successfully: %+v", req)
-
-		l := transaction.NewTransactionLogic(r.Context(), svcCtx)
-		resp, err := l.WrapSend(&req)
-		if err != nil {
-			httpx.ErrorCtx(r.Context(), w, err)
-		} else {
-			httpx.OkJsonCtx(r.Context(), w, resp)
-		}
-	}
-}
-
+// Hello 端点健康校验
 func Hello(svcCtx *svc.ServiceContext) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-
 		resp := "hello world"
 		httpx.OkJsonCtx(r.Context(), w, resp)
 	}
