@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"demo/internal/logic"
+	"demo/internal/logic/transaction"
 	"demo/internal/svc"
 	"demo/internal/types"
 	"net/http"
@@ -18,7 +18,7 @@ func WalletInitHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 			return
 		}
 
-		l := logic.NewWalletLogic(r.Context(), svcCtx)
+		l := transaction.NewWalletLogic(r.Context(), svcCtx)
 		resp, err := l.WalletInit(&req)
 		if err != nil {
 			httpx.ErrorCtx(r.Context(), w, err)

@@ -21,3 +21,7 @@ Chains:
     Name: "Ethereum Mainnet"
     RpcUrl: "https://mainnet.infura.io/v3/your-infura-id"
     ChainId: 1
+  Solana:
+    Name: "Solana Mainnet"
+    RpcUrl: "https://api.mainnet-beta.solana.com"
+    ChainId: 1151111081099710

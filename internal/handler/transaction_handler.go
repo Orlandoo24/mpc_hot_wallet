@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"demo/internal/logic"
+	"demo/internal/logic/transaction"
 	"demo/internal/svc"
 	"demo/internal/types"
 	"net/http"
@@ -23,7 +23,7 @@ func SendHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 		}
 		logx.WithContext(r.Context()).Infof("Request body parsed successfully: %+v", req)
 
-		l := logic.NewTransactionLogic(r.Context(), svcCtx)
+		l := transaction.NewTransactionLogic(r.Context(), svcCtx)
 		resp, err := l.WrapSend(&req)
 		if err != nil {
 			httpx.ErrorCtx(r.Context(), w, err)
@@ -44,7 +44,7 @@ func SwapHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 		}
 		logx.WithContext(r.Context()).Infof("Request body parsed successfully: %+v", req)
 
-		l := logic.NewTransactionLogic(r.Context(), svcCtx)
+		l := transaction.NewTransactionLogic(r.Context(), svcCtx)
 		resp, err := l.WrapSwap(&req)
 		if err != nil {
 			httpx.ErrorCtx(r.Context(), w, err)
@@ -66,7 +66,7 @@ func BridgeQuoteHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 		}
 		logx.WithContext(r.Context()).Infof("Request body parsed successfully: %+v", req)
 
-		l := logic.NewBridgeLogic(r.Context(), svcCtx)
+		l := transaction.NewBridgeLogic(r.Context(), svcCtx)
 		resp, err := l.GetBridgeQuote(&req)
 		if err != nil {
 			httpx.ErrorCtx(r.Context(), w, err)
@@ -88,7 +88,7 @@ func BridgeHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 		}
 		logx.WithContext(r.Context()).Infof("Request body parsed successfully: %+v", req)
 
-		l := logic.NewBridgeLogic(r.Context(), svcCtx)
+		l := transaction.NewBridgeLogic(r.Context(), svcCtx)
 		resp, err := l.ExecuteBridge(&req)
 		if err != nil {
 			httpx.ErrorCtx(r.Context(), w, err)
@@ -110,7 +110,7 @@ func BridgeStatusHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 		}
 		logx.WithContext(r.Context()).Infof("Request body parsed successfully: %+v", req)
 
-		l := logic.NewBridgeLogic(r.Context(), svcCtx)
+		l := transaction.NewBridgeLogic(r.Context(), svcCtx)
 		resp, err := l.GetBridgeStatus(&req)
 		if err != nil {
 			httpx.ErrorCtx(r.Context(), w, err)
@@ -132,7 +132,7 @@ func WrapBridgeHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 		}
 		logx.WithContext(r.Context()).Infof("Request body parsed successfully: %+v", req)
 
-		l := logic.NewBridgeLogic(r.Context(), svcCtx)
+		l := transaction.NewBridgeLogic(r.Context(), svcCtx)
 		resp, err := l.WrapBridge(&req)
 		if err != nil {
 			httpx.ErrorCtx(r.Context(), w, err)
@@ -154,7 +154,7 @@ func CheckAllowanceHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 		}
 		logx.WithContext(r.Context()).Infof("Request body parsed successfully: %+v", req)
 
-		l := logic.NewApproveLogic(r.Context(), svcCtx)
+		l := transaction.NewApproveLogic(r.Context(), svcCtx)
 		resp, err := l.CheckTokenAllowance(&req)
 		if err != nil {
 			httpx.ErrorCtx(r.Context(), w, err)
@@ -176,7 +176,7 @@ func ApproveHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 		}
 		logx.WithContext(r.Context()).Infof("Request body parsed successfully: %+v", req)
 
-		l := logic.NewApproveLogic(r.Context(), svcCtx)
+		l := transaction.NewApproveLogic(r.Context(), svcCtx)
 		resp, err := l.ApproveToken(&req)
 		if err != nil {
 			httpx.ErrorCtx(r.Context(), w, err)
@@ -198,7 +198,7 @@ func RevokeHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 		}
 		logx.WithContext(r.Context()).Infof("Request body parsed successfully: %+v", req)
 
-		l := logic.NewApproveLogic(r.Context(), svcCtx)
+		l := transaction.NewApproveLogic(r.Context(), svcCtx)
 		resp, err := l.RevokeTokenApproval(&req)
 		if err != nil {
 			httpx.ErrorCtx(r.Context(), w, err)
@@ -220,7 +220,7 @@ func GetUserApprovalsHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 		}
 		logx.WithContext(r.Context()).Infof("Request body parsed successfully: %+v", req)
 
-		l := logic.NewApproveLogic(r.Context(), svcCtx)
+		l := transaction.NewApproveLogic(r.Context(), svcCtx)
 		resp, err := l.GetUserApprovals(&req)
 		if err != nil {
 			httpx.ErrorCtx(r.Context(), w, err)

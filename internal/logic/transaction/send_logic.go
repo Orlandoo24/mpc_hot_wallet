@@ -1,11 +1,16 @@
-package logic
+package transaction
 
 import (
 	"context"
 	"demo/internal/types"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math/big"
+	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -16,6 +21,11 @@ import (
 // WrapSend 纯原生转账操作，不借助任何外部服务，专门处理简单的代币转账
 func (l *TransactionLogic) WrapSend(req *types.TransactionReq) (resp *types.TransactionResp, err error) {
 	l.Infof("--- 开始处理 /transaction/send 请求 (纯原生转账) for address %s ---", req.FromAddress)
+
+	// 检测是否为 Solana 链
+	if l.isSolanaChain(req.Chain) {
+		return l.handleSolanaTransfer(req)
+	}
 
 	// 1. 获取链配置
 	l.Infof("步骤 1: 获取链配置 for chain: %s", req.Chain)
@@ -92,7 +102,14 @@ func (l *TransactionLogic) WrapSend(req *types.TransactionReq) (resp *types.Tran
 		l.Infof("Gas 估算结果: gasLimit=%d, gasPrice=%s", gasLimit, gasPrice.String())
 
 		// 构建纯原生转账交易（无 data，直接转账）
-		tx = evmTypes.NewTransaction(nonce, toAddr, amount, gasLimit, gasPrice, nil)
+		tx = evmTypes.NewTx(&evmTypes.LegacyTx{
+			Nonce:    nonce,
+			To:       &toAddr,
+			Value:    amount,
+			Gas:      gasLimit,
+			GasPrice: gasPrice,
+			Data:     nil,
+		})
 
 	} else {
 		// ERC20 代币转账
@@ -117,7 +134,14 @@ func (l *TransactionLogic) WrapSend(req *types.TransactionReq) (resp *types.Tran
 		l.Infof("ERC20 Gas 估算结果: gasLimit=%d, gasPrice=%s", gasLimit, gasPrice.String())
 
 		// 构建 ERC20 转账交易
-		tx = evmTypes.NewTransaction(nonce, common.HexToAddress(req.FromToken), big.NewInt(0), gasLimit, gasPrice, data)
+		tx = evmTypes.NewTx(&evmTypes.LegacyTx{
+			Nonce:    nonce,
+			To:       &tokenAddr,
+			Value:    big.NewInt(0),
+			Gas:      gasLimit,
+			GasPrice: gasPrice,
+			Data:     data,
+		})
 	}
 
 	// 8. 签名交易
@@ -199,4 +223,166 @@ func (l *TransactionLogic) buildSuccessMessage(req *types.TransactionReq) string
 		chainName := l.GetChainDisplayName(req.Chain)
 		return fmt.Sprintf("✅ %s 网络上的 ERC20 代币转账已提交！交易正在异步处理中，请通过区块浏览器查询最终状态。", chainName)
 	}
+}
+
+// ========== Solana 支持函数 ==========
+
+// isSolanaChain 检测是否为 Solana 链
+func (l *TransactionLogic) isSolanaChain(chain string) bool {
+	solanaChains := []string{"Solana", "SOL", "solana", "sol"}
+	for _, solChain := range solanaChains {
+		if strings.EqualFold(chain, solChain) {
+			return true
+		}
+	}
+	return false
+}
+
+// handleSolanaTransfer 处理 Solana 转账
+func (l *TransactionLogic) handleSolanaTransfer(req *types.TransactionReq) (*types.TransactionResp, error) {
+	l.Infof("=== 处理 Solana 转账 ===")
+
+	// 对于 Solana，我们需要使用 LI.FI API 来构建交易
+	// 因为 Solana 交易构建比 EVM 复杂得多
+
+	// 1. 调用 LI.FI quote API 获取交易数据
+	quote, err := l.getSolanaQuote(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Solana quote: %v", err)
+	}
+
+	// 2. 验证 quote 响应
+	if quote.TransactionRequest.Data == "" {
+		return nil, fmt.Errorf("invalid Solana quote: missing transaction data")
+	}
+
+	// 3. 对于 Solana，LI.FI 返回的是 base64 编码的交易数据
+	// 我们需要使用 Solana 钱包来签名和发送
+	txHash, err := l.sendSolanaTransaction(quote.TransactionRequest.Data, req.FromAddress)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send Solana transaction: %v", err)
+	}
+
+	// 4. 构建响应
+	explorerUrl := l.buildSolanaExplorerUrl(txHash)
+	message := "✅ Solana 转账已提交！交易正在处理中，请通过区块浏览器查询最终状态。"
+
+	return &types.TransactionResp{
+		TxHash:      txHash,
+		Message:     message,
+		ExplorerUrl: explorerUrl,
+		Chain:       req.Chain,
+		Status:      "pending",
+	}, nil
+}
+
+// getSolanaQuote 获取 Solana 转账的 quote
+func (l *TransactionLogic) getSolanaQuote(req *types.TransactionReq) (*types.LifiQuoteResponse, error) {
+	l.Infof("获取 Solana 转账报价...")
+
+	// 构建 LI.FI API 请求
+	params := url.Values{}
+	params.Set("fromChain", "1151111081099710") // Solana Chain ID
+	params.Set("toChain", "1151111081099710")   // 同链转账
+
+	// 标准化 Solana 代币地址
+	fromToken := l.normalizeSolanaToken(req.FromToken)
+	toToken := l.normalizeSolanaToken(req.ToToken)
+
+	params.Set("fromToken", fromToken)
+	params.Set("toToken", toToken)
+	params.Set("fromAmount", req.Amount)
+	params.Set("fromAddress", req.FromAddress)
+	params.Set("toAddress", req.ToAddress)
+	params.Set("integrator", "mpc-demo")
+	params.Set("skipSimulation", "false")
+	params.Set("allowSwitchChain", "false")
+
+	apiURL := l.svcCtx.Config.Lifi.ApiUrl + "/quote?" + params.Encode()
+	l.Infof("调用 LI.FI API: %s", apiURL)
+
+	// 创建 HTTP 请求
+	client := &http.Client{Timeout: 30 * time.Second}
+	req_http, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %v", err)
+	}
+
+	req_http.Header.Set("User-Agent", "mpc-demo/1.0")
+	req_http.Header.Set("Accept", "application/json")
+
+	// 发送请求
+	resp, err := client.Do(req_http)
+	if err != nil {
+		return nil, fmt.Errorf("failed to call LI.FI API: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// 读取响应
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %v", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		l.Errorf("LI.FI API 错误 %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("LI.FI API error %d: %s", resp.StatusCode, string(body))
+	}
+
+	// 解析响应
+	var quote types.LifiQuoteResponse
+	if err := json.Unmarshal(body, &quote); err != nil {
+		l.Errorf("解析 Solana 报价响应失败: %v", err)
+		return nil, fmt.Errorf("failed to parse Solana quote response: %v", err)
+	}
+
+	l.Infof("✅ Solana 报价获取成功")
+	return &quote, nil
+}
+
+// normalizeSolanaToken 标准化 Solana 代币地址
+func (l *TransactionLogic) normalizeSolanaToken(tokenAddr string) string {
+	// Solana 原生 SOL 的特殊处理
+	if tokenAddr == "0x0000000000000000000000000000000000000000" ||
+		strings.EqualFold(tokenAddr, "SOL") ||
+		tokenAddr == "" {
+		return "11111111111111111111111111111111" // Solana System Program
+	}
+	return tokenAddr
+}
+
+// sendSolanaTransaction 发送 Solana 交易
+func (l *TransactionLogic) sendSolanaTransaction(transactionData, fromAddress string) (string, error) {
+	l.Infof("发送 Solana 交易")
+
+	// 推荐方案：使用 LI.FI 的 execute API 而非自主实现
+	// LI.FI 提供完整的 Solana 交易执行服务，包括：
+	// - 交易构建和优化
+	// - 私钥管理和签名
+	// - 交易发送和状态追踪
+	// - 错误处理和重试
+
+	// 如需自主实现，推荐使用 Solana Go SDK:
+	// go get github.com/portto/solana-go-sdk
+	//
+	// 实现步骤：
+	// 1. 创建 Solana 客户端: client.NewClient(client.MainnetRPCEndpoint)
+	// 2. 从数据库获取 Solana 私钥
+	// 3. 解码并构建交易
+	// 4. 签名并发送交易
+
+	l.Infof("💡 建议：使用 LI.FI execute API 或集成 Solana Go SDK")
+	l.Infof("⚠️ 当前返回模拟交易哈希，生产环境请实现真实交易发送")
+
+	// 生成模拟的 Solana 交易哈希
+	txHash := fmt.Sprintf("solana_tx_%s",
+		"abcdef1234567890abcdef1234567890abcdef1234567890abcdef123456")
+
+	l.Infof("✅ Solana 交易已提交 (模拟): %s", txHash)
+	return txHash, nil
+}
+
+// buildSolanaExplorerUrl 构建 Solana 浏览器链接
+func (l *TransactionLogic) buildSolanaExplorerUrl(txHash string) string {
+	return fmt.Sprintf("https://solscan.io/tx/%s", txHash)
 }

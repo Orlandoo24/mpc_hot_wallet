@@ -1,4 +1,4 @@
-package logic
+package transaction
 
 import (
 	"context"
@@ -31,8 +31,6 @@ func NewTransactionLogic(ctx context.Context, svcCtx *svc.ServiceContext) *Trans
 		Logger: logx.WithContext(ctx),
 	}
 }
-
-// ========== 高优先级通用函数 ==========
 
 // IsNativeToken 判断是否为原生代币
 func (l *TransactionLogic) IsNativeToken(token string) bool {
@@ -124,8 +122,15 @@ func (l *TransactionLogic) BuildAndSendTransaction(client *ethclient.Client, pri
 		return "", fmt.Errorf("failed to get nonce: %v", err)
 	}
 
-	// 构建交易
-	tx := evmTypes.NewTransaction(nonce, to, value, gasLimit, gasPrice, data)
+	// 构建交易（使用新的 NewTx 方法替代已弃用的 NewTransaction）
+	tx := evmTypes.NewTx(&evmTypes.LegacyTx{
+		Nonce:    nonce,
+		To:       &to,
+		Value:    value,
+		Gas:      gasLimit,
+		GasPrice: gasPrice,
+		Data:     data,
+	})
 
 	// 签名交易
 	signedTx, err := evmTypes.SignTx(tx, evmTypes.NewEIP155Signer(big.NewInt(chainId)), privateKey)
@@ -170,8 +175,6 @@ func (l *TransactionLogic) BuildExplorerUrl(chain, txHash string) string {
 		return fmt.Sprintf("https://explorer.example.com/tx/%s", txHash)
 	}
 }
-
-// ========== 中优先级通用函数 ==========
 
 // BuildERC20TransferData 构建 ERC20 transfer 调用数据
 func (l *TransactionLogic) BuildERC20TransferData(toAddress string, amount *big.Int) ([]byte, error) {
@@ -331,8 +334,6 @@ func (l *TransactionLogic) EstimateERC20TransferGas(client *ethclient.Client, fr
 	return gasLimit, gasPrice, nil
 }
 
-// ========== 低优先级通用函数 ==========
-
 // GetChainDisplayName 获取链的显示名称
 func (l *TransactionLogic) GetChainDisplayName(chain string) string {
 	switch chain {
@@ -350,6 +351,8 @@ func (l *TransactionLogic) GetChainDisplayName(chain string) string {
 		return "Polygon 主网"
 	case "Polygon-Mumbai":
 		return "Polygon Mumbai 测试网"
+	case "Solana", "SOL", "solana", "sol":
+		return "Solana 主网"
 	default:
 		return chain
 	}
