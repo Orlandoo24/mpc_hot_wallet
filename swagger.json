@@ -1,0 +1,217 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "MPC Demo API",
+    "description": "API documentation for the MPC Demo application.",
+    "version": "1.0.0"
+  },
+  "host": "localhost:8888",
+  "basePath": "/api",
+  "schemes": [
+    "http"
+  ],
+  "paths": {
+    "/wallet_init": {
+      "post": {
+        "summary": "Initialize a Wallet",
+        "description": "Creates a new wallet for a given user and chain.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "description": "Wallet initialization request",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/WalletInitReq"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation",
+            "schema": {
+              "$ref": "#/definitions/WalletInitResp"
+            }
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/transaction/send": {
+      "post": {
+        "summary": "Send Transaction",
+        "description": "Creates, signs, and sends a transaction.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "in": "body",
+            "name": "body",
+            "description": "Transaction send request",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/TransactionSendReq"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation",
+            "schema": {
+              "$ref": "#/definitions/TransactionSendResp"
+            }
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/transaction/approve": {
+      "post": {
+        "summary": "Approve Transaction (Not Implemented)",
+        "responses": {
+          "501": {
+            "description": "Not Implemented"
+          }
+        }
+      }
+    },
+    "/transaction/revoke": {
+      "post": {
+        "summary": "Revoke Transaction (Not Implemented)",
+        "responses": {
+          "501": {
+            "description": "Not Implemented"
+          }
+        }
+      }
+    },
+    "/transaction/receive": {
+      "get": {
+        "summary": "Receive Transaction (Not Implemented)",
+        "responses": {
+          "501": {
+            "description": "Not Implemented"
+          }
+        }
+      }
+    },
+    "/transaction/swap": {
+      "post": {
+        "summary": "Swap Transaction (Not Implemented)",
+        "responses": {
+          "501": {
+            "description": "Not Implemented"
+          }
+        }
+      }
+    },
+    "/transaction/bridge": {
+      "post": {
+        "summary": "Bridge Transaction (Not Implemented)",
+        "responses": {
+          "501": {
+            "description": "Not Implemented"
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "WalletInitReq": {
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "example": "user-abc-123"
+        },
+        "chain": {
+          "type": "string",
+          "example": "bsc-testnet"
+        }
+      },
+      "required": [
+        "user_id",
+        "chain"
+      ]
+    },
+    "WalletInitResp": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "type": "string",
+          "example": "0x123...abc"
+        }
+      }
+    },
+    "TransactionSendReq": {
+      "type": "object",
+      "properties": {
+        "from_address": {
+          "type": "string",
+          "example": "0xDC881Fe66502a439dF3bCaE13e4068b5163AfD37"
+        },
+        "to_address": {
+          "type": "string",
+          "example": "0x5c5670d9EaeC91AdcDfC4424a8C2490FCC6049b2"
+        },
+        "from_chain": {
+          "type": "string",
+          "description": "e.g., 'bsc-testnet'",
+          "example": "bsc-testnet"
+        },
+        "to_chain": {
+          "type": "string",
+          "description": "e.g., 'bsc-testnet'",
+          "example": "bsc-testnet"
+        },
+        "from_token": {
+          "type": "string",
+          "description": "Token address, '0x0000000000000000000000000000000000000000' for native token",
+          "example": "0x0000000000000000000000000000000000000000"
+        },
+        "to_token": {
+          "type": "string",
+          "description": "Token address, '0x0000000000000000000000000000000000000000' for native token",
+          "example": "0x0000000000000000000000000000000000000000"
+        },
+        "amount": {
+          "type": "string",
+          "description": "Amount in smallest unit (e.g., wei)",
+          "example": "100000000000000"
+        }
+      },
+      "required": [
+        "from_address",
+        "to_address",
+        "from_chain",
+        "to_chain",
+        "from_token",
+        "to_token",
+        "amount"
+      ]
+    },
+    "TransactionSendResp": {
+      "type": "object",
+      "properties": {
+        "tx_hash": {
+          "type": "string",
+          "example": "0xabc...123"
+        }
+      }
+    }
+  }
+}
