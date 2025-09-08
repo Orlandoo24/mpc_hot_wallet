@@ -13,6 +13,7 @@ var ErrNotFound = gorm.ErrRecordNotFound
 type WalletsDao interface {
 	Insert(ctx context.Context, data *Wallets) error
 	FindOneByAddress(ctx context.Context, address string) (*Wallets, error)
+	FindAll(ctx context.Context) ([]*Wallets, error)
 }
 
 type walletsDao struct {
@@ -42,4 +43,14 @@ func (d *walletsDao) FindOneByAddress(ctx context.Context, address string) (*Wal
 		return nil, err
 	}
 	return &resp, nil
+}
+
+// FindAll retrieves all wallet records.
+func (d *walletsDao) FindAll(ctx context.Context) ([]*Wallets, error) {
+	var wallets []*Wallets
+	err := d.db.WithContext(ctx).Find(&wallets).Error
+	if err != nil {
+		return nil, err
+	}
+	return wallets, nil
 }
