@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/big"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -16,7 +18,8 @@ type TokenEvent struct {
 	BlockNumber uint64 `json:"blockNumber"`
 	TxHash      string `json:"txHash"`
 	Timestamp   int64  `json:"timestamp"`
-	EventType   string `json:"eventType"` // send/receive/swap/bridge/approve/revoke
+	EventType   string `json:"eventType"` // ABI标准事件名称: Transfer/Approval/Swap/Bridge/Deposit/Withdrawal/NativeTransfer
+	Direction   string `json:"direction"` // IN/OUT/NONE - 资金流向标记
 	FromAddr    string `json:"fromAddr"`
 	ToAddr      string `json:"toAddr"`
 	TokenAddr   string `json:"tokenAddr"` // 代币合约地址
@@ -107,19 +110,33 @@ func (m *BSCMonitor) processBlock(ctx context.Context, header *types.Header) err
 		return fmt.Errorf("获取区块失败: %w", err)
 	}
 
-	log.Printf("处理区块 %d, 包含 %d 个交易", blockNumber, len(block.Transactions()))
-
 	// 处理区块中的每个交易
+	var relevantTxCount int
 	for _, tx := range block.Transactions() {
-		if err := m.processTx(ctx, tx, blockNumber, timestamp); err != nil {
-			log.Printf("处理交易 %s 失败: %v", tx.Hash().Hex(), err)
+		// 检查是否为监控的交易
+		if m.isWatchedTransaction(tx) {
+			// 第一个相关交易时输出区块日志
+			if relevantTxCount == 0 {
+				log.Printf("🔍 发现相关区块 %d (包含监控地址的交易)", blockNumber)
+			}
+			relevantTxCount++
+
+			// 处理相关交易
+			if err := m.processTx(ctx, tx, blockNumber, timestamp); err != nil {
+				log.Printf("处理交易 %s 失败: %v", tx.Hash().Hex(), err)
+			}
 		}
+	}
+
+	// 输出相关交易统计
+	if relevantTxCount > 0 {
+		log.Printf("✅ 区块 %d 处理完成，找到 %d 个相关交易", blockNumber, relevantTxCount)
 	}
 
 	return nil
 }
 
-// processTx 处理单个交易
+// processTx 处理单个交易（调用前已确认是监控的交易）
 func (m *BSCMonitor) processTx(ctx context.Context, tx *types.Transaction, blockNumber uint64, timestamp int64) error {
 	// 获取交易回执
 	receipt, err := m.client.TransactionReceipt(ctx, tx.Hash())
@@ -129,11 +146,7 @@ func (m *BSCMonitor) processTx(ctx context.Context, tx *types.Transaction, block
 
 	// 检查交易状态
 	if receipt.Status != types.ReceiptStatusSuccessful {
-		return nil // 跳过失败的交易
-	}
-
-	// 检查是否涉及监控地址
-	if !m.isWatchedTransaction(tx) {
+		log.Printf("⚠️  跳过失败交易: %s", tx.Hash().Hex())
 		return nil
 	}
 
@@ -152,13 +165,18 @@ func (m *BSCMonitor) processTx(ctx context.Context, tx *types.Transaction, block
 
 // isWatchedTransaction 检查是否为监控的交易
 func (m *BSCMonitor) isWatchedTransaction(tx *types.Transaction) bool {
-	// 如果没有设置监控地址，监控所有交易
+	// 如果没有设置监控地址，不监控任何交易
 	if len(m.watchAddresses) == 0 {
-		return true
+		return false
 	}
 
 	// 检查发送方地址
-	signer := types.LatestSignerForChainID(tx.ChainId())
+	// 修复ChainID为0的问题，BSC链ID为56
+	txChainID := tx.ChainId()
+	if txChainID == nil || txChainID.Uint64() == 0 {
+		txChainID = big.NewInt(56) // BSC Chain ID
+	}
+	signer := types.LatestSignerForChainID(txChainID)
 	if from, err := signer.Sender(tx); err == nil {
 		if m.watchAddresses[from] {
 			return true
@@ -184,19 +202,74 @@ func MockKafkaProducer(event *TokenEvent) {
 
 // StartBSCMonitoring 启动BSC监控 (对外接口)
 func StartBSCMonitoring(ctx context.Context, wsURL string, watchAddresses []string) error {
-	monitor, err := NewBSCMonitor(wsURL, watchAddresses)
-	if err != nil {
-		return err
+	// 带重连机制的监控启动
+	return StartBSCMonitoringWithReconnect(ctx, wsURL, watchAddresses)
+}
+
+// StartBSCMonitoringWithReconnect 带自动重连的BSC监控
+func StartBSCMonitoringWithReconnect(ctx context.Context, wsURL string, watchAddresses []string) error {
+	for {
+		select {
+		case <-ctx.Done():
+			log.Println("✅ BSC监控服务已停止")
+			return ctx.Err()
+		default:
+			log.Println("🔄 尝试连接BSC监控...")
+
+			monitor, err := NewBSCMonitor(wsURL, watchAddresses)
+			if err != nil {
+				log.Printf("❌ 创建BSC监控失败: %v, 5秒后重试...", err)
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-time.After(5 * time.Second):
+					continue
+				}
+			}
+
+			// 添加Kafka事件处理器
+			monitor.AddEventHandler(MockKafkaProducer)
+
+			// 添加日志事件处理器
+			monitor.AddEventHandler(func(event *TokenEvent) {
+				formattedAmount := FormatTokenAmount(event.Amount, event.TokenAddr, event.ChainId)
+
+				// 为不同方向的事件添加不同的emoji
+				var emoji string
+				switch event.Direction {
+				case "IN":
+					emoji = "📥" // 接收
+				case "OUT":
+					emoji = "📤" // 发送
+				default:
+					emoji = "🔔" // 其他事件
+				}
+
+				// 构建方向标记
+				var directionTag string
+				if event.Direction != "NONE" && event.Direction != "" {
+					directionTag = fmt.Sprintf("-%s", event.Direction)
+				}
+
+				log.Printf("%s EVM事件: %s%s | 金额: %s | 哈希: %s",
+					emoji, event.EventType, directionTag, formattedAmount, event.TxHash[:10]+"...")
+			})
+
+			// 启动监控
+			err = monitor.Start(ctx)
+			if err != nil {
+				if err == context.Canceled {
+					log.Println("✅ BSC监控服务已停止")
+					return err
+				}
+				log.Printf("❌ BSC监控连接异常: %v, 3秒后重连...", err)
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-time.After(3 * time.Second):
+					continue
+				}
+			}
+		}
 	}
-
-	// 添加Kafka事件处理器
-	monitor.AddEventHandler(MockKafkaProducer)
-
-	// 添加日志事件处理器
-	monitor.AddEventHandler(func(event *TokenEvent) {
-		log.Printf("🔔 检测到代币事件: 类型=%s, 金额=%s, 代币=%s",
-			event.EventType, event.Amount, event.TokenAddr)
-	})
-
-	return monitor.Start(ctx)
 }

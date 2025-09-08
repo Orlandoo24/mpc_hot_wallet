@@ -43,12 +43,25 @@ func NewServiceContext(c config.Config) *ServiceContext {
 // startBSCMonitor 启动BSC监控
 func (svc *ServiceContext) startBSCMonitor() {
 	// BSC WebSocket URL
-	wsURL := "wss://bsc-rpc.publicnode.com"
+	//wsURL := "wss://bsc-rpc.publicnode.com"
+	wsURL := "wss://bsc-testnet-rpc.publicnode.com"
 
-	// 监控地址列表 (可以从配置文件读取，这里先硬编码为空，监控所有交易)
-	watchAddresses := []string{
-		// 可以添加需要监控的特定地址
-		// "0x742d35Cc6474C4532C59AE3f970d89BbE8Fb0eEA",
+	// 从数据库获取所有钱包地址
+	watchAddresses := svc.getWalletAddressesFromDB()
+
+	if len(watchAddresses) == 0 {
+		log.Println("⚠️  数据库中没有找到钱包地址，跳过BSC监控启动")
+		return
+	}
+
+	log.Printf("📍 将监控 %d 个钱包地址", len(watchAddresses))
+	for i, addr := range watchAddresses {
+		if i < 5 { // 只显示前5个地址
+			log.Printf("   - %s", addr)
+		} else if i == 5 {
+			log.Printf("   - ... 还有 %d 个地址", len(watchAddresses)-5)
+			break
+		}
 	}
 
 	// 创建监控上下文
@@ -66,6 +79,25 @@ func (svc *ServiceContext) startBSCMonitor() {
 			}
 		}
 	}()
+}
+
+// getWalletAddressesFromDB 从数据库获取钱包地址
+func (svc *ServiceContext) getWalletAddressesFromDB() []string {
+	// 查询所有钱包地址
+	wallets, err := svc.WalletsDao.FindAll(context.Background())
+	if err != nil {
+		log.Printf("⚠️  获取钱包地址失败: %v", err)
+		return []string{}
+	}
+
+	var addresses []string
+	for _, wallet := range wallets {
+		if wallet.Address != "" {
+			addresses = append(addresses, wallet.Address)
+		}
+	}
+
+	return addresses
 }
 
 // StopMonitor 停止监控服务
