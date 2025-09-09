@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"demo/internal/logic/transaction"
+	"demo/internal/logic/wallet"
 	"demo/internal/svc"
 	"demo/internal/types"
 	"net/http"
@@ -9,7 +9,7 @@ import (
 	"github.com/zeromicro/go-zero/rest/httpx"
 )
 
-// WalletInitHandler 创建 eth 钱包
+// WalletInitHandler 创建多链钱包（根据系统配置自动创建）
 func WalletInitHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req types.WalletInitReq
@@ -18,7 +18,7 @@ func WalletInitHandler(svcCtx *svc.ServiceContext) http.HandlerFunc {
 			return
 		}
 
-		l := transaction.NewWalletLogic(r.Context(), svcCtx)
+		l := wallet.NewWalletLogic(r.Context(), svcCtx)
 		resp, err := l.WalletInit(&req)
 		if err != nil {
 			httpx.ErrorCtx(r.Context(), w, err)

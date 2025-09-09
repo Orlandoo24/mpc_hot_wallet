@@ -344,21 +344,33 @@ func FormatTokenAmount(amountStr string, tokenAddr string, chainId uint64) strin
 
 // formatNativeToken 格式化原生代币
 func formatNativeToken(amount *big.Int, chainId uint64) string {
-	// 1 ETH/BNB = 10^18 wei
-	eth := new(big.Float).SetInt(amount)
-	eth.Quo(eth, new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil)))
-
 	var symbol string
+	var divisor *big.Int
+
 	switch chainId {
 	case 1, 5, 11155111: // Ethereum 主网, Goerli, Sepolia
 		symbol = "ETH"
+		divisor = new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil) // 18 decimals
 	case 56, 97: // BSC 主网, BSC 测试网
 		symbol = "BNB"
+		divisor = new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil) // 18 decimals
 	case 137, 80001: // Polygon 主网, Mumbai
 		symbol = "MATIC"
+		divisor = new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil) // 18 decimals
+	case 20000000000001: // Bitcoin 主网
+		symbol = "BTC"
+		divisor = new(big.Int).Exp(big.NewInt(10), big.NewInt(8), nil) // 8 decimals
+	case 20000000000002: // Bitcoin 测试网
+		symbol = "tBTC"
+		divisor = new(big.Int).Exp(big.NewInt(10), big.NewInt(8), nil) // 8 decimals
 	default:
 		symbol = "Native"
+		divisor = new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil) // 默认18位小数
 	}
+
+	// 格式化金额
+	eth := new(big.Float).SetInt(amount)
+	eth.Quo(eth, new(big.Float).SetInt(divisor))
 
 	// 格式化为合适的精度
 	floatVal, _ := eth.Float64()

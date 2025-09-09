@@ -15,4 +15,5 @@ type Wallets struct {
 	Email               sql.NullString `db:"email"`
 	CreatedAt           time.Time      `db:"created_at"`
 	UpdatedAt           time.Time      `db:"updated_at"`
+	ChainType           sql.NullString `db:"chain_type"`
 }

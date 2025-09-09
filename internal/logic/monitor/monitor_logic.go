@@ -36,6 +36,14 @@ type BSCMonitor struct {
 	logParser      *LogParser
 }
 
+// BTCMonitor Bitcoin测试网监控器
+type BTCMonitor struct {
+	rpcURL         string
+	watchAddresses []string // Bitcoin地址列表
+	eventHandlers  []func(*TokenEvent)
+	chainId        uint64 // Bitcoin Testnet Chain ID: 20000000000002
+}
+
 // NewBSCMonitor 创建BSC监控器
 func NewBSCMonitor(wsURL string, watchAddresses []string) (*BSCMonitor, error) {
 	client, err := ethclient.Dial(wsURL)
@@ -65,8 +73,25 @@ func NewBSCMonitor(wsURL string, watchAddresses []string) (*BSCMonitor, error) {
 	return monitor, nil
 }
 
+// NewBTCMonitor 创建Bitcoin测试网监控器
+func NewBTCMonitor(rpcURL string, watchAddresses []string) (*BTCMonitor, error) {
+	monitor := &BTCMonitor{
+		rpcURL:         rpcURL,
+		watchAddresses: watchAddresses,
+		eventHandlers:  make([]func(*TokenEvent), 0),
+		chainId:        20000000000002, // Bitcoin Testnet Chain ID
+	}
+
+	return monitor, nil
+}
+
 // AddEventHandler 添加事件处理器
 func (m *BSCMonitor) AddEventHandler(handler func(*TokenEvent)) {
+	m.eventHandlers = append(m.eventHandlers, handler)
+}
+
+// AddEventHandler 为BTC监控器添加事件处理器
+func (m *BTCMonitor) AddEventHandler(handler func(*TokenEvent)) {
 	m.eventHandlers = append(m.eventHandlers, handler)
 }
 
@@ -263,6 +288,98 @@ func StartBSCMonitoringWithReconnect(ctx context.Context, wsURL string, watchAdd
 					return err
 				}
 				log.Printf("❌ BSC监控连接异常: %v, 3秒后重连...", err)
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-time.After(3 * time.Second):
+					continue
+				}
+			}
+		}
+	}
+}
+
+// Start 开始BTC监控
+func (m *BTCMonitor) Start(ctx context.Context) error {
+	log.Printf("开始监控 Bitcoin 测试网交易... RPC: %s", m.rpcURL)
+
+	// BTC 监控实现（简化版本）
+	// 实际实现需要：
+	// 1. 连接到 Bitcoin 测试网 RPC
+	// 2. 订阅新区块或使用轮询
+	// 3. 解析每个区块的交易
+	// 4. 检查是否包含监控地址
+	// 5. 生成 TokenEvent 并触发处理器
+
+	ticker := time.NewTicker(30 * time.Second) // 30秒轮询一次
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			log.Println("Bitcoin 监控已停止")
+			return ctx.Err()
+		case <-ticker.C:
+			// 模拟监控逻辑
+			if err := m.checkBTCTransactions(ctx); err != nil {
+				log.Printf("检查BTC交易失败: %v", err)
+			}
+		}
+	}
+}
+
+// checkBTCTransactions 检查BTC交易（模拟实现）
+func (m *BTCMonitor) checkBTCTransactions(ctx context.Context) error {
+	// 这里应该实现真实的BTC交易检查逻辑
+	// 1. 调用 Bitcoin RPC API 获取最新区块
+	// 2. 解析区块中的交易
+	// 3. 检查是否涉及监控地址
+	// 4. 生成相应的 TokenEvent
+
+	log.Printf("🔍 检查 Bitcoin 测试网交易 (监控地址: %d 个)", len(m.watchAddresses))
+	return nil
+}
+
+// StartBTCMonitoring 启动BTC监控
+func StartBTCMonitoring(ctx context.Context, rpcURL string, watchAddresses []string) error {
+	return StartBTCMonitoringWithReconnect(ctx, rpcURL, watchAddresses)
+}
+
+// StartBTCMonitoringWithReconnect 带自动重连的BTC监控
+func StartBTCMonitoringWithReconnect(ctx context.Context, rpcURL string, watchAddresses []string) error {
+	for {
+		select {
+		case <-ctx.Done():
+			log.Println("✅ Bitcoin监控服务已停止")
+			return ctx.Err()
+		default:
+			log.Println("🔄 尝试连接Bitcoin测试网监控...")
+
+			monitor, err := NewBTCMonitor(rpcURL, watchAddresses)
+			if err != nil {
+				log.Printf("❌ 创建Bitcoin监控失败: %v, 5秒后重试...", err)
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-time.After(5 * time.Second):
+					continue
+				}
+			}
+
+			// 添加事件处理器
+			monitor.AddEventHandler(func(event *TokenEvent) {
+				log.Printf("₿ Bitcoin事件: %s | 金额: %s satoshi | 哈希: %s",
+					event.EventType, event.Amount, event.TxHash[:10]+"...")
+			})
+
+			// 启动监控
+			err = monitor.Start(ctx)
+			if err != nil {
+				if err == context.Canceled {
+					log.Println("✅ Bitcoin监控服务已停止")
+					return err
+				}
+				log.Printf("❌ Bitcoin监控连接异常: %v, 3秒后重连...", err)
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
