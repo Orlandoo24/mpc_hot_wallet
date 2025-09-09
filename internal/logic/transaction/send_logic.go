@@ -383,7 +383,7 @@ func (l *TransactionLogic) sendSolanaTransactionDirect(fromAddress, toAddress, a
 
 	// 2. 创建 Solana 客户端（使用测试网）
 	l.Infof("步骤 2: 连接到 Solana 测试网...")
-	rpcEndpoint := "https://solana-testnet-rpc.publicnode.com"
+	rpcEndpoint := "https://api.devnet.solana.com"
 	c := solanaClient.NewClient(rpcEndpoint)
 
 	// 3. 创建账户对象

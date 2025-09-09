@@ -29,3 +29,8 @@ Chains:
     Name: "Solana TestNet"
     RpcUrl: "https://solana-testnet-rpc.publicnode.com"
     ChainId: 102
+  Solana-DevNet:
+    Name: "Solana DevNet"
+    RpcUrl: "https://api.devnet.solana.com"
+    ChainId: 103
+
