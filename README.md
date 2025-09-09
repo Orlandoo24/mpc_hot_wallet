@@ -1,19 +1,27 @@
-# MPC Demo - 本地热钱包演示项目
+# MPC Demo - 多链钱包 API 服务
 
-一个基于 Go-Zero 框架构建的多功能区块链钱包 API 服务，集成了 LI.FI 跨链协议和实时区块链监控功能，提供完整的钱包操作、代币交换、跨链转账、授权管理和交易监控功能。
+一个基于 Go-Zero 框架构建的企业级多链钱包 API 服务，支持 **EVM 兼容链**、**Bitcoin** 和 **Solana** 三大生态系统。集成 LI.FI 跨链协议和实时区块链监控，提供完整的钱包管理、多链转账、代币交换、跨链桥接、授权管理和交易监控解决方案。
 
-## ✨ 主要功能
+## 🌟 核心特性
 
-### 🔐 钱包管理
-- **钱包初始化** - 创建和管理以太坊兼容钱包
-- **私钥管理** - 安全的私钥存储和检索
-- **多链支持** - 支持 BSC、ETH、Polygon、Arbitrum、Optimism、Base 等主流链
+### 🔗 多链生态支持
+- **EVM 生态** - 以太坊、BSC、Polygon 等 EVM 兼容链
+- **Bitcoin 生态** - Bitcoin 测试网原生转账（优化 UTXO 管理）
+- **Solana 生态** - Solana 主网和测试网支持
+- **统一接口** - 一套 API 操作所有支持的区块链
 
-### 💸 交易功能
-- **原生转账** - 支持 ETH、BNB 等原生代币转账
-- **ERC20 转账** - 支持所有标准 ERC20 代币转账
-- **智能 Gas 估算** - 动态 Gas 价格和限制优化
-- **交易状态追踪** - 完整的交易确认和状态监控
+### 🔐 企业级钱包管理
+- **多链钱包初始化** - 同时创建 EVM、Bitcoin、Solana 钱包
+- **安全私钥管理** - 数据库加密存储和检索
+- **地址验证** - 智能识别和验证不同链的地址格式
+- **批量钱包操作** - 支持批量创建和管理钱包
+
+### 💸 全链转账功能
+- **EVM 原生转账** - ETH、BNB、MATIC 等原生代币转账
+- **ERC20 代币转账** - 支持所有标准 ERC20 代币
+- **Bitcoin 转账** - 优化的 UTXO 选择和交易构建
+- **Solana 转账** - SPL 代币和 SOL 原生转账
+- **智能 Gas 优化** - 动态费用估算和优化
 
 ### 🔄 代币交换 (Swap)
 - **LI.FI 集成** - 使用 LI.FI 协议获得最优交换路由
@@ -21,26 +29,34 @@
 - **滑点保护** - 可配置的滑点保护机制
 - **多 DEX 聚合** - 自动选择最优的去中心化交易所
 
-### 🌉 跨链转账 (Bridge)
-- **多链桥接** - 支持主流区块链之间的资产跨链
-- **LI.FI 最佳实践** - 集成官方推荐的优化参数
-- **状态轮询** - 实时跟踪跨链交易进度
-- **重试机制** - 自动处理网络异常和交易失败
+### 🌉 跨链桥接 (Bridge)
+- **多链资产桥接** - 支持 EVM 链之间的资产跨链转移
+- **LI.FI 协议集成** - 使用业界领先的跨链聚合协议
+- **最优路由选择** - 自动选择最快或最便宜的跨链路由
+- **实时状态追踪** - 完整的跨链交易进度监控
+- **智能重试机制** - 自动处理网络异常和交易失败
 
-### 🔑 授权管理 (Approve)
-- **授权检查** - 查询代币对特定合约的授权额度
-- **智能授权** - 支持无限授权和指定金额授权
-- **批量查询** - 一次查询多个代币的授权状态
-- **授权撤销** - 安全撤销不需要的代币授权
+### 🔑 智能授权管理
+- **精确授权检查** - 实时查询 ERC20 代币授权状态
+- **智能授权策略** - 支持无限授权和精确金额授权
+- **批量授权查询** - 一次性查询多个代币的授权状态
+- **安全授权撤销** - 一键撤销不必要的代币授权
+- **授权历史追踪** - 完整的用户授权操作记录
 
-### 📊 实时区块链监控
-- **WebSocket 连接** - 实时监控 BSC 测试网区块链交易
-- **智能事件解析** - 自动识别 Transfer、Approval、Swap、Bridge 等 EVM 事件
-- **方向识别** - 智能标记交易方向（IN/OUT），精确识别资金流向
-- **LI.FI 增强** - 集成 LI.FI API 进行高级交易类型识别
-- **Kafka 集成** - 将解析的事件数据推送到 Kafka 消息队列
-- **自动重连** - WebSocket 连接异常时自动重连机制
-- **钱包过滤** - 只监控数据库中存储的钱包地址相关交易
+### 📊 实时链上监控
+- **多链监控支持** - 实时监控 EVM 链上交易活动
+- **智能事件解析** - 自动解析 Transfer、Approval、Swap 等链上事件
+- **交易方向识别** - 精确标记资金流向（IN/OUT/INTERNAL）
+- **LI.FI 事件增强** - 集成 LI.FI API 进行高级交易分析
+- **WebSocket 实时连接** - 毫秒级的链上数据推送
+- **Kafka 数据流** - 结构化事件数据推送到消息队列
+- **智能钱包过滤** - 只监控数据库中管理的钱包地址
+
+### ⚡ Bitcoin 优化特性
+- **优化 UTXO 管理** - 使用 Blockstream API 替代不稳定的 RPC 连接
+- **智能费用计算** - 动态矿工费估算和优化
+- **多地址格式支持** - 支持 P2PKH、P2SH、SegWit 等地址格式
+- **测试网完整支持** - 完整的 Bitcoin 测试网转账功能
 
 ## 🚀 快速开始
 
@@ -79,48 +95,97 @@ go run main.go
 
 ## 📋 API 接口文档
 
-### 钱包管理
+### 🔐 钱包管理
 
-#### 初始化钱包
+#### 初始化多链钱包
 ```http
 POST /api/wallet_init
 Content-Type: application/json
 
 {
-  "address": "0x...",
-  "private_key": "0x..."
+  "address": "0x742d35Cc6634C0532925a3b8D0c5B2b8b8c8c8c8",
+  "private_key": "0x1234567890abcdef..."
 }
 ```
 
-### 交易操作
+### 💸 多链转账操作
 
-#### 发送交易
+#### EVM 链转账（ETH/BNB/MATIC 等）
 ```http
 POST /api/transaction/send
 Content-Type: application/json
 
 {
-  "from_address": "0x...",
-  "to_address": "0x...",
   "chain": "BSC",
+  "from_address": "0x742d35Cc6634C0532925a3b8D0c5B2b8b8c8c8c8",
+  "to_address": "0x8ba1f109551bD432803012645Hac136c22C57592",
   "from_token": "0x0000000000000000000000000000000000000000",
   "to_token": "0x0000000000000000000000000000000000000000",
   "amount": "1000000000000000000"
 }
 ```
 
-#### 代币交换
+#### Bitcoin 转账
+```http
+POST /api/transaction/send
+Content-Type: application/json
+
+{
+  "chain": "BTC",
+  "from_address": "n21s8JW8s9YX8tQ5LkbedjVAkBJPA11XcR",
+  "to_address": "mtP6cccjQPZw82sbPdSHha6N68o945y4cU",
+  "from_token": "BTC",
+  "to_token": "BTC",
+  "amount": "10000"
+}
+```
+*注：Bitcoin 金额单位为 satoshi (1 BTC = 100,000,000 satoshi)*
+
+#### Solana 转账
+```http
+POST /api/transaction/send
+Content-Type: application/json
+
+{
+  "chain": "Solana",
+  "from_address": "DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK",
+  "to_address": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+  "from_token": "11111111111111111111111111111111",
+  "to_token": "11111111111111111111111111111111",
+  "amount": "1000000000"
+}
+```
+*注：Solana 金额单位为 lamports (1 SOL = 1,000,000,000 lamports)*
+
+#### ERC20 代币转账
+```http
+POST /api/transaction/send
+Content-Type: application/json
+
+{
+  "chain": "BSC",
+  "from_address": "0x742d35Cc6634C0532925a3b8D0c5B2b8b8c8c8c8",
+  "to_address": "0x8ba1f109551bD432803012645Hac136c22C57592",
+  "from_token": "0x55d398326f99059fF775485246999027B3197955",
+  "to_token": "0x55d398326f99059fF775485246999027B3197955",
+  "amount": "1000000000000000000"
+}
+```
+
+### 🔄 代币交换
+
+#### EVM 链代币交换
 ```http
 POST /api/transaction/swap
 Content-Type: application/json
 
 {
-  "from_address": "0x...",
-  "to_address": "0x...",
   "chain": "BSC",
+  "from_address": "0x742d35Cc6634C0532925a3b8D0c5B2b8b8c8c8c8",
+  "to_address": "0x742d35Cc6634C0532925a3b8D0c5B2b8b8c8c8c8",
   "from_token": "0x0000000000000000000000000000000000000000",
   "to_token": "0x55d398326f99059fF775485246999027B3197955",
-  "amount": "10000000000000"
+  "amount": "100000000000000000"
 }
 ```
 
@@ -336,32 +401,7 @@ mpc_demo/
 4. 推送到分支 (`git push origin feature/AmazingFeature`)
 5. 开启 Pull Request
 
-## 📄 许可证
 
-本项目采用 MIT 许可证。
-
-## 🆘 常见问题
-
-### Q: 如何添加新的区块链支持？
-A: 在 `etc/demo.yaml` 中添加新的链配置，并在相关逻辑文件中添加链ID映射。
-
-### Q: 交易失败怎么办？
-A: 检查 Gas 价格、网络状态和账户余额。系统包含自动重试机制。
-
-### Q: 如何更换 RPC 节点？
-A: 修改 `etc/demo.yaml` 中对应链的 `RpcUrl` 配置。
-
-### Q: 跨链交易卡住了怎么办？
-A: 使用 `/api/bridge/status` 接口查询交易状态，LI.FI 协议会自动处理大部分异常情况。
-
-### Q: 区块链监控功能如何工作？
-A: 系统会自动连接 BSC 测试网 WebSocket，实时监控数据库中钱包地址的相关交易，解析事件并推送到 Kafka。
-
-### Q: 如何查看监控到的交易事件？
-A: 监控事件会在控制台输出，格式为：`📥 EVM事件: Transfer-IN | 金额: 0.00001 BNB | 哈希: 0x1234...`
-
-### Q: 监控服务断开了怎么办？
-A: 系统具备自动重连机制，WebSocket 连接异常时会自动尝试重连。
 
 ---
 
