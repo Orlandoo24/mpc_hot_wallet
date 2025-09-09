@@ -59,7 +59,7 @@ func (l *BridgeLogic) GetBridgeQuote(req *types.BridgeQuoteReq) (*types.BridgeQu
 	params.Set("fromAmount", req.FromAmount)
 	params.Set("fromAddress", req.FromAddress)
 	params.Set("toAddress", req.ToAddress)
-	params.Set("integrator", "mpc-demo") // 集成商标识
+	params.Set("integrator", "mpc_go-demo") // 集成商标识
 
 	// LI.FI 最佳实践优化参数
 	if req.Order != "" {

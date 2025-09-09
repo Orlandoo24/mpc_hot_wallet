@@ -70,7 +70,7 @@
 1. **克隆项目**
 ```bash
 git clone <repository-url>
-cd mpc_demo
+cd mpc_go
 ```
 
 2. **安装依赖**

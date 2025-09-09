@@ -15,7 +15,7 @@ import (
 	"github.com/zeromicro/go-zero/rest"
 )
 
-var configFile = flag.String("f", "/Users/123jiaru/Desktop/project/hashlink/mpc_demo/etc/demo.yaml", "the config file")
+var configFile = flag.String("f", "/Users/123jiaru/Desktop/project/hashlink/mpc_go/etc/demo.yaml", "the config file")
 
 func main() {
 	flag.Parse()

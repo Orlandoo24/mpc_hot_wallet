@@ -59,7 +59,7 @@ func main() {
 	// 4. 运行签名协议
 	fmt.Println("\n--- 阶段 2: 签名 ---")
 	// 定义待签名的消息 (通常是交易哈希)
-	msgToSign := []byte("hashlink-mpc-demo")
+	msgToSign := []byte("hashlink-mpc_go-demo")
 	msgHash := ethcrypto.Keccak256(msgToSign)
 
 	// We need threshold + 1 signers

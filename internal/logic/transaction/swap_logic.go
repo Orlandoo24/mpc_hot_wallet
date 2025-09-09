@@ -105,7 +105,7 @@ func (l *TransactionLogic) getLifiQuote(req *types.TransactionReq) (*types.LifiQ
 	params.Set("toToken", l.normalizeTokenAddress(req.ToToken))
 	params.Set("fromAmount", req.Amount)
 	params.Set("fromAddress", req.FromAddress)
-	params.Set("integrator", "mpc-demo") // 集成商标识
+	params.Set("integrator", "mpc_go-demo") // 集成商标识
 
 	// LI.FI 最佳实践优化参数
 	params.Set("order", "FASTEST")          // 优先选择最快路由
@@ -463,7 +463,7 @@ func (l *TransactionLogic) getSolanaSwapQuote(req *types.TransactionReq) (*types
 	params.Set("toToken", l.normalizeSolanaTokenAddress(req.ToToken))
 	params.Set("fromAmount", req.Amount)
 	params.Set("fromAddress", req.FromAddress)
-	params.Set("integrator", "mpc-demo")
+	params.Set("integrator", "mpc_go-demo")
 
 	// Solana 特定的优化参数
 	params.Set("order", "FASTEST")          // 优先选择最快路由

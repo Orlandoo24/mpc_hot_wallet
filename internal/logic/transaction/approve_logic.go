@@ -628,7 +628,7 @@ func (l *ApproveLogic) createATAViaLiFi(tokenAddress, ownerAddress string) (stri
 		"fromAmount":  "0", // 0 金额，主要是为了创建 ATA
 		"fromAddress": ownerAddress,
 		"toAddress":   ownerAddress,
-		"integrator":  "mpc-demo",
+		"integrator":  "mpc_go-demo",
 	}
 
 	jsonData, err := json.Marshal(requestBody)
