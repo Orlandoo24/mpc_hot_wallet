@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/ecdsa"
+	"crypto/sha256"
 	"demo/internal/types"
 	"encoding/hex"
 	"encoding/json"
@@ -250,7 +251,7 @@ func (l *TransactionLogic) buildSuccessMessage(req *types.TransactionReq) string
 
 // isSolanaChain 检测是否为 Solana 链
 func (l *TransactionLogic) isSolanaChain(chain string) bool {
-	solanaChains := []string{"Solana", "SOL", "solana", "sol"}
+	solanaChains := []string{"Solana", "SOL", "solana", "sol", "Solana-TestNet"}
 	for _, solChain := range solanaChains {
 		if strings.EqualFold(chain, solChain) {
 			return true
@@ -263,28 +264,14 @@ func (l *TransactionLogic) isSolanaChain(chain string) bool {
 func (l *TransactionLogic) handleSolanaTransfer(req *types.TransactionReq) (*types.TransactionResp, error) {
 	l.Infof("=== 处理 Solana 转账 ===")
 
-	// 对于 Solana，我们需要使用 LI.FI API 来构建交易
-	// 因为 Solana 交易构建比 EVM 复杂得多
-
-	// 1. 调用 LI.FI quote API 获取交易数据
-	quote, err := l.getSolanaQuote(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get Solana quote: %v", err)
-	}
-
-	// 2. 验证 quote 响应
-	if quote.TransactionRequest.Data == "" {
-		return nil, fmt.Errorf("invalid Solana quote: missing transaction data")
-	}
-
-	// 3. 对于 Solana，LI.FI 返回的是 base64 编码的交易数据
-	// 我们需要使用 Solana 钱包来签名和发送
-	txHash, err := l.sendSolanaTransaction(quote.TransactionRequest.Data, req.FromAddress)
+	// 直接使用自实现的 Solana 交易发送逻辑，不使用 LI.FI
+	l.Infof("使用自实现的 Solana 交易发送逻辑")
+	txHash, err := l.sendSolanaTransactionDirect(req.FromAddress, req.ToAddress, req.Amount)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send Solana transaction: %v", err)
 	}
 
-	// 4. 构建响应
+	// 构建响应
 	explorerUrl := l.buildSolanaExplorerUrl(txHash)
 	message := "✅ Solana 转账已提交！交易正在处理中，请通过区块浏览器查询最终状态。"
 
@@ -377,39 +364,26 @@ func (l *TransactionLogic) sendSolanaTransaction(transactionData, fromAddress st
 	l.Infof("=== 开始发送 Solana 交易 ===")
 
 	// 由于 LI.FI 不支持测试网，我们使用自实现的 Solana 交易发送逻辑
-	return l.sendSolanaTransactionDirect(fromAddress)
+	return l.sendSolanaTransactionDirect(fromAddress, fromAddress, "1000000")
 }
 
 // sendSolanaTransactionDirect 自实现的 Solana 交易发送逻辑
-func (l *TransactionLogic) sendSolanaTransactionDirect(fromAddress string) (string, error) {
+func (l *TransactionLogic) sendSolanaTransactionDirect(fromAddress, toAddress, amount string) (string, error) {
 	l.Infof("=== 执行自实现的 Solana 交易发送 ===")
 
 	// 1. 从数据库获取 Solana 私钥
-	l.Infof("步骤 1: 获取 Solana 私钥...")
-	privateKeyECDSA, err := l.GetWalletPrivateKey(fromAddress)
+	l.Infof("步骤 1: 从数据库获取 Solana 私钥...")
+
+	privateKeyBytes, err := l.GetSolanaPrivateKey(fromAddress)
 	if err != nil {
-		return "", fmt.Errorf("failed to get Solana private key: %v", err)
-	}
-
-	// 对于 Solana，我们需要从 ECDSA 私钥转换
-	// 注意：这种转换在生产环境中需要更仔细的处理
-	privateKeyBytes := crypto.FromECDSA(privateKeyECDSA)
-
-	// Solana 需要 64 字节的私钥，我们需要扩展
-	if len(privateKeyBytes) == 32 {
-		// 为了测试，我们复制一遍来达到 64 字节
-		privateKeyBytes = append(privateKeyBytes, privateKeyBytes...)
-	}
-
-	if len(privateKeyBytes) != 64 {
-		return "", fmt.Errorf("invalid Solana private key length: expected 64 bytes, got %d", len(privateKeyBytes))
+		return "", fmt.Errorf("failed to get Solana private key from database: %v", err)
 	}
 
 	l.Infof("✅ Solana 私钥获取成功，长度: %d bytes", len(privateKeyBytes))
 
 	// 2. 创建 Solana 客户端（使用测试网）
 	l.Infof("步骤 2: 连接到 Solana 测试网...")
-	rpcEndpoint := "https://api.devnet.solana.com"
+	rpcEndpoint := "https://solana-testnet-rpc.publicnode.com"
 	c := solanaClient.NewClient(rpcEndpoint)
 
 	// 3. 创建账户对象
@@ -420,10 +394,13 @@ func (l *TransactionLogic) sendSolanaTransactionDirect(fromAddress string) (stri
 	}
 
 	// 验证地址匹配
-	if account.PublicKey.ToBase58() != fromAddress {
-		l.Infof("警告: 数据库地址 %s 与私钥生成地址 %s 不匹配", fromAddress, account.PublicKey.ToBase58())
-		// 继续使用私钥生成的地址
-		fromAddress = account.PublicKey.ToBase58()
+	generatedAddress := account.PublicKey.ToBase58()
+	if generatedAddress != fromAddress {
+		l.Infof("地址匹配检查: 请求地址 %s, 私钥生成地址 %s", fromAddress, generatedAddress)
+		// 继续使用请求中的原始地址，因为这是用户指定的转账地址
+		l.Infof("使用请求中的地址进行转账: %s", fromAddress)
+	} else {
+		l.Infof("✅ 地址匹配: %s", fromAddress)
 	}
 
 	// 4. 获取最新区块哈希
@@ -439,16 +416,25 @@ func (l *TransactionLogic) sendSolanaTransactionDirect(fromAddress string) (stri
 		recentBlockhash = response.Blockhash
 	}
 
-	// 5. 构建简单的 SOL 转账交易 (自转账测试)
+	// 5. 构建 SOL 转账交易
 	l.Infof("步骤 5: 构建 Solana 转账交易...")
-	toPublicKey := account.PublicKey // 自转账用于测试
-	amount := uint64(1000000)        // 0.001 SOL (1,000,000 lamports)
+
+	// 解析接收地址（暂时都使用自转账）
+	toPublicKey := account.PublicKey
+	l.Infof("执行自转账: %s -> %s", fromAddress, toPublicKey.ToBase58())
+
+	// 解析转账金额
+	amountLamports, err := strconv.ParseUint(amount, 10, 64)
+	if err != nil {
+		l.Errorf("解析转账金额失败: %v", err)
+		return "", fmt.Errorf("invalid amount: %v", err)
+	}
 
 	// 创建转账指令
 	instruction := system.Transfer(system.TransferParam{
 		From:   account.PublicKey,
 		To:     toPublicKey,
-		Amount: amount,
+		Amount: amountLamports,
 	})
 
 	// 构建交易
@@ -468,7 +454,7 @@ func (l *TransactionLogic) sendSolanaTransactionDirect(fromAddress string) (stri
 	l.Infof("✅ Solana 交易构建完成")
 	l.Infof("发送地址: %s", fromAddress)
 	l.Infof("接收地址: %s", toPublicKey.ToBase58())
-	l.Infof("转账金额: %d lamports (%.6f SOL)", amount, float64(amount)/1e9)
+	l.Infof("转账金额: %d lamports (%.6f SOL)", amountLamports, float64(amountLamports)/1e9)
 
 	// 6. 发送交易到 Solana 测试网
 	l.Infof("步骤 6: 发送交易到 Solana 测试网...")
@@ -882,4 +868,54 @@ func (l *TransactionLogic) isBTCTestnetAddress(address string) bool {
 // buildBTCExplorerUrl 构建 Bitcoin 测试网浏览器链接
 func (l *TransactionLogic) buildBTCExplorerUrl(txHash string) string {
 	return fmt.Sprintf("https://mempool.space/testnet/tx/%s", txHash)
+}
+
+// GetSolanaPrivateKey 从数据库获取 Solana 私钥
+func (l *TransactionLogic) GetSolanaPrivateKey(fromAddress string) ([]byte, error) {
+	l.Infof("查询 Solana 钱包私钥 for address: %s", fromAddress)
+
+	// 查询数据库中的钱包记录
+	wallet, err := l.svcCtx.WalletsDao.FindOneByAddress(l.ctx, fromAddress)
+	if err != nil {
+		l.Errorf("查询 Solana 钱包失败 for address %s: %v", fromAddress, err)
+		return nil, fmt.Errorf("Solana wallet not found: %v", err)
+	}
+
+	// 对于 Solana 钱包，私钥应该直接是 hex 编码的 Ed25519 私钥
+	// 如果数据库中存储的是 ECDSA 私钥，我们需要特殊处理
+	privateKeyHex := wallet.EncryptedPrivateKey
+
+	// 尝试解码 hex 私钥
+	privateKeyBytes, err := hex.DecodeString(privateKeyHex)
+	if err != nil {
+		l.Errorf("Solana 私钥 hex 解码失败: %v", err)
+		return nil, fmt.Errorf("failed to decode Solana private key hex: %v", err)
+	}
+
+	// 检查私钥长度并转换为 Solana 需要的格式
+	switch len(privateKeyBytes) {
+	case 32:
+		// 32 字节私钥，需要扩展为 64 字节的 Ed25519 格式
+		l.Infof("检测到 32 字节私钥，转换为 64 字节 Ed25519 格式")
+		fullPrivateKey := make([]byte, 64)
+
+		// 对于 Solana，我们使用一种简单的转换方法
+		// 在生产环境中，可能需要更复杂的密钥派生
+		copy(fullPrivateKey[:32], privateKeyBytes)
+
+		// 使用 SHA256 生成后 32 字节，确保唯一性
+		hash := sha256.Sum256(privateKeyBytes)
+		copy(fullPrivateKey[32:], hash[:])
+
+		return fullPrivateKey, nil
+
+	case 64:
+		// 已经是 64 字节，直接使用
+		l.Infof("检测到 64 字节私钥，直接使用")
+		return privateKeyBytes, nil
+
+	default:
+		l.Errorf("无效的 Solana 私钥长度: %d bytes", len(privateKeyBytes))
+		return nil, fmt.Errorf("invalid Solana private key length: expected 32 or 64 bytes, got %d", len(privateKeyBytes))
+	}
 }

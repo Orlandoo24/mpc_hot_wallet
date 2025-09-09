@@ -24,4 +24,8 @@ Chains:
   Solana:
     Name: "Solana Mainnet"
     RpcUrl: "https://api.mainnet-beta.solana.com"
-    ChainId: 1151111081099710
+    ChainId: 101
+  Solana-TestNet:
+    Name: "Solana TestNet"
+    RpcUrl: "https://solana-testnet-rpc.publicnode.com"
+    ChainId: 102
