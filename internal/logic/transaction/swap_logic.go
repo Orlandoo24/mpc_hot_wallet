@@ -869,7 +869,7 @@ func (l *TransactionLogic) handleSolanaTestNetSwapNative(req *types.TransactionR
 	txHash, err := cli.SendTransaction(context.Background(), tx)
 	if err != nil {
 		l.Errorf("发送原生 Solana swap 交易失败: %v", err)
-		return nil, fmt.Errorf("Solana swap transaction failed: %v", err)
+		return nil, fmt.Errorf("solana swap transaction failed: %v", err)
 	}
 
 	// 8. 构建响应
@@ -1152,15 +1152,14 @@ func (l *TransactionLogic) isEVMTestnet(chain string) bool {
 	return false
 }
 
-// handleEVMTestnetSwap 处理 EVM 测试网原生 swap
+// handleEVMTestnetSwap 处理 EVM 测试网原生 swap (入口函数)
 func (l *TransactionLogic) handleEVMTestnetSwap(req *types.TransactionReq) (*types.TransactionResp, error) {
-	l.Infof("=== 执行 EVM 测试网原生 swap ===")
+	l.Infof("=== 执行 EVM 测试网原生 swap (修正版) ===")
 	l.Infof("Swap 请求: %s %s -> %s on %s", req.Amount, req.FromToken, req.ToToken, req.Chain)
 
-	// 获取链配置
+	// 获取链配置 (使用您的已有逻辑)
 	chainConfig, ok := l.svcCtx.Config.Chains[req.Chain]
 	if !ok {
-		// 如果没有找到确切的链配置，尝试匹配主网配置
 		mainnetChain := l.getMainnetChainName(req.Chain)
 		chainConfig, ok = l.svcCtx.Config.Chains[mainnetChain]
 		if !ok {
@@ -1168,7 +1167,6 @@ func (l *TransactionLogic) handleEVMTestnetSwap(req *types.TransactionReq) (*typ
 		}
 		l.Infof("使用主网配置 %s 作为测试网 %s 的配置模板", mainnetChain, req.Chain)
 	}
-
 	l.Infof("使用配置: ChainId=%d, RpcUrl=%s", chainConfig.ChainId, chainConfig.RpcUrl)
 
 	// 连接到 RPC 客户端
@@ -1185,7 +1183,7 @@ func (l *TransactionLogic) handleEVMTestnetSwap(req *types.TransactionReq) (*typ
 		return nil, err
 	}
 
-	// 执行原生 EVM swap 逻辑
+	// 执行包含 approve 逻辑的完整 swap 流程
 	txHash, err := l.executeEVMTestnetSwapNative(client, privateKey, req, &chainConfig)
 	if err != nil {
 		l.Errorf("EVM 测试网 swap 交易失败: %v", err)
@@ -1245,58 +1243,83 @@ func (l *TransactionLogic) getMainnetChainName(testnetChain string) string {
 	return "BSC" // 默认使用 BSC
 }
 
-// executeEVMTestnetSwapNative 执行原生 EVM 测试网 swap
+// executeEVMTestnetSwapNative 执行原生 EVM 测试网 swap 的核心逻辑 (包含 approve)
 func (l *TransactionLogic) executeEVMTestnetSwapNative(client *ethclient.Client, privateKey *ecdsa.PrivateKey, req *types.TransactionReq, chainConfig *config.ChainConf) (string, error) {
-	l.Infof("=== 执行原生 EVM 测试网 swap ===")
+	// BSC 测试网核心地址
+	routerAddr := common.HexToAddress("0xD99D1c33F9fC3444f8101754aBeCb321741Da593") // PancakeSwap V2 Router
+	wbnbAddr := common.HexToAddress("0xae13d989dac2f0debff460ac112a837c89baa7cd")   // WBNB
 
-	// 对于测试网，我们实现一个简化的 swap 逻辑
-	// 在生产环境中，这里需要集成测试网的 DEX（如 Uniswap V2/V3, PancakeSwap 等）
+	// 1. (关键新增) 如果 FromToken 是 ERC20，检查并执行 Approve
+	if !l.IsNativeToken(req.FromToken) {
+		l.Infof("检测到 FromToken 为 ERC20，开始检查 Approve 授权...")
+		err := l.checkAndApproveIfNeeded(client, privateKey, req.FromToken, routerAddr, req.Amount, chainConfig)
+		if err != nil {
+			return "", err // 如果 approve 失败，则中断交易
+		}
+	}
 
-	// 目前实现一个简化版本：
-	// 1. 如果是原生代币 swap，直接转账（测试用）
-	// 2. 如果是 ERC20 swap，需要调用 DEX 合约
+	// 2. 根据交易类型，确定调用的函数、路径和交易的 Value
+	var (
+		swapFunction string
+		path         []common.Address
+		value        *big.Int
+		err          error
+	)
+
+	amountIn, _ := new(big.Int).SetString(req.Amount, 10)
+	fromTokenAddr := common.HexToAddress(req.FromToken)
+	toTokenAddr := common.HexToAddress(req.ToToken)
 
 	if l.IsNativeToken(req.FromToken) {
-		l.Infof("原生代币 swap，执行简化转账逻辑（测试网）")
-		return l.executeNativeTokenSwapTestnet(client, privateKey, req, chainConfig)
+		// Case 1: 原生 BNB -> Token
+		l.Infof("Swap 类型: 原生 BNB -> Token")
+		swapFunction = "swapExactETHForTokens"
+		path = []common.Address{wbnbAddr, toTokenAddr}
+		value = amountIn // 原生币交易，value 等于转账金额
+
+	} else if l.IsNativeToken(req.ToToken) {
+		// Case 2: Token -> 原生 BNB
+		l.Infof("Swap 类型: Token -> 原生 BNB")
+		// 使用 supportingFeeOnTransferTokens 版本的函数更稳定，能兼容手续费代币
+		swapFunction = "swapExactTokensForETHSupportingFeeOnTransferTokens"
+		path = []common.Address{fromTokenAddr, wbnbAddr}
+		value = big.NewInt(0) // ERC20 交易，value 为 0
+
 	} else {
-		l.Infof("ERC20 代币 swap，执行 DEX 调用逻辑（测试网）")
-		return l.executeERC20SwapTestnet(client, privateKey, req, chainConfig)
-	}
-}
-
-// executeNativeTokenSwapTestnet 执行原生代币 swap（测试网简化版）
-func (l *TransactionLogic) executeNativeTokenSwapTestnet(client *ethclient.Client, privateKey *ecdsa.PrivateKey, req *types.TransactionReq, chainConfig *config.ChainConf) (string, error) {
-	l.Infof("执行原生代币测试网 swap（简化为转账）")
-
-	// 对于测试网，我们简化为一个普通转账
-	// 在真实的 DEX 中，这里需要调用 DEX 合约进行 swap
-
-	amount, ok := new(big.Int).SetString(req.Amount, 10)
-	if !ok {
-		return "", fmt.Errorf("invalid amount: %s", req.Amount)
+		// Case 3: Token -> Token
+		l.Infof("Swap 类型: Token -> Token")
+		swapFunction = "swapExactTokensForTokensSupportingFeeOnTransferTokens"
+		path = []common.Address{fromTokenAddr, wbnbAddr, toTokenAddr} // 默认通过 WBNB 中转
+		value = big.NewInt(0)
 	}
 
-	// 简化：转给自己（模拟 swap 后的代币到账）
-	toAddr := common.HexToAddress(req.ToAddress)
-	if req.ToAddress == "" {
-		toAddr = common.HexToAddress(req.FromAddress)
+	// 3. 构建 ABI 和 calldata
+	to := crypto.PubkeyToAddress(privateKey.PublicKey)
+	if req.ToAddress != "" {
+		to = common.HexToAddress(req.ToAddress)
 	}
+	deadline := big.NewInt(time.Now().Add(10 * time.Minute).Unix())
+	amountOutMin := big.NewInt(0) // 测试网设为0，表示不在乎滑点
 
-	// 估算 gas
-	gasLimit, _, err := l.EstimateNativeTransferGas(client, common.HexToAddress(req.FromAddress), toAddr, amount)
+	// 从 PancakeSwap V2 Router ABI 中解析出所有需要的函数
+	routerABI, err := abi.JSON(strings.NewReader(`[{"constant":false,"inputs":[{"internalType":"uint256","name":"amountOutMin","type":"uint256"},{"internalType":"address[]","name":"path","type":"address[]"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"deadline","type":"uint256"}],"name":"swapExactETHForTokens","outputs":[{"internalType":"uint256[]","name":"amounts","type":"uint256[]"}],"payable":true,"stateMutability":"payable","type":"function"},{"constant":false,"inputs":[{"internalType":"uint256","name":"amountIn","type":"uint256"},{"internalType":"uint256","name":"amountOutMin","type":"uint256"},{"internalType":"address[]","name":"path","type":"address[]"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"deadline","type":"uint256"}],"name":"swapExactTokensForETHSupportingFeeOnTransferTokens","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":false,"inputs":[{"internalType":"uint256","name":"amountIn","type":"uint256"},{"internalType":"uint256","name":"amountOutMin","type":"uint256"},{"internalType":"address[]","name":"path","type":"address[]"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"deadline","type":"uint256"}],"name":"swapExactTokensForTokensSupportingFeeOnTransferTokens","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"}]`))
 	if err != nil {
-		gasLimit = 21000 // 默认值
+		return "", fmt.Errorf("failed to parse router ABI: %v", err)
 	}
 
-	// 获取 gas price
-	gasPrice, err := client.SuggestGasPrice(context.Background())
+	var calldata []byte
+	switch swapFunction {
+	case "swapExactETHForTokens":
+		calldata, err = routerABI.Pack(swapFunction, amountOutMin, path, to, deadline)
+	default: // For both swapExactTokensFor... functions
+		calldata, err = routerABI.Pack(swapFunction, amountIn, amountOutMin, path, to, deadline)
+	}
 	if err != nil {
-		return "", fmt.Errorf("failed to get gas price: %v", err)
+		return "", fmt.Errorf("failed to pack calldata for %s: %v", swapFunction, err)
 	}
 
-	// 构建并发送交易
-	return l.BuildAndSendTransaction(client, privateKey, toAddr, amount, []byte{}, gasLimit, gasPrice, chainConfig.ChainId)
+	// 4. 发送交易
+	return l.sendDynamicTx(client, privateKey, &routerAddr, value, calldata, chainConfig)
 }
 
 // executeERC20SwapTestnet 执行 ERC20 代币 swap（测试网真实 DEX）
@@ -1444,4 +1467,154 @@ func (l *TransactionLogic) executeDEXSwap(client *ethclient.Client, privateKey *
 	l.Infof("Swap 详情: %s %s -> %s via %s", req.Amount, req.FromToken, req.ToToken, swapFunction)
 
 	return txHash, nil
+}
+
+// =======================================================
+// ===== 新增的辅助函数 =====
+// =======================================================
+
+// checkAndApproveIfNeeded 检查并执行 Approve 的辅助函数
+func (l *TransactionLogic) checkAndApproveIfNeeded(client *ethclient.Client, privateKey *ecdsa.PrivateKey, tokenAddress string, spender common.Address, amount string, chainConfig *config.ChainConf) error {
+	// 1. 检查当前 Allowance
+	tokenAddr := common.HexToAddress(tokenAddress)
+	ownerAddr := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	allowance, err := l.checkAllowance(client, tokenAddr, ownerAddr, spender)
+	if err != nil {
+		return fmt.Errorf("failed to check allowance: %v", err)
+	}
+
+	// 2. 比较额度
+	amountIn, _ := new(big.Int).SetString(amount, 10)
+	if allowance.Cmp(amountIn) >= 0 {
+		l.Infof("✅ Approve 额度充足 (%s), 无需授权。", allowance.String())
+		return nil
+	}
+
+	l.Infof("Approve 额度不足 (现有 %s, 需要 %s)，正在执行授权...", allowance.String(), amountIn.String())
+
+	// 3. 执行 Approve 交易
+	// 为方便起见，直接授权最大值，避免未来重复授权
+	maxApproveAmount := new(big.Int)
+	maxApproveAmount.SetString("115792089237316195423570985008687907853269984665640564039457584007913129639935", 10)
+
+	erc20ABI, err := abi.JSON(strings.NewReader(`[{"constant":false,"inputs":[{"name":"_spender","type":"address"},{"name":"_value","type":"uint256"}],"name":"approve","outputs":[{"name":"","type":"bool"}],"payable":false,"stateMutability":"nonpayable","type":"function"}]`))
+	if err != nil {
+		return fmt.Errorf("failed to parse ERC20 approve ABI: %v", err)
+	}
+
+	calldata, err := erc20ABI.Pack("approve", spender, maxApproveAmount)
+	if err != nil {
+		return fmt.Errorf("failed to pack approve calldata: %v", err)
+	}
+
+	txHash, err := l.sendDynamicTx(client, privateKey, &tokenAddr, big.NewInt(0), calldata, chainConfig)
+	if err != nil {
+		return fmt.Errorf("failed to send approve transaction: %v", err)
+	}
+
+	l.Infof("⏳ Approve 交易已发送: %s, 正在等待确认...", txHash)
+
+	// 等待 Approve 交易被打包确认，这是关键一步，防止 swap 因 nonce 问题或额度未生效而失败
+	receipt, err := l.waitForTransaction(client, common.HexToHash(txHash))
+	if err != nil {
+		return fmt.Errorf("failed to get approve transaction receipt: %v", err)
+	}
+	if receipt.Status != evmTypes.ReceiptStatusSuccessful {
+		return fmt.Errorf("approve transaction failed, tx_hash: %s", txHash)
+	}
+
+	l.Infof("✅ Approve 交易已确认！")
+	return nil
+}
+
+// checkAllowance 查询 ERC20 授权额度
+func (l *TransactionLogic) checkAllowance(client *ethclient.Client, token, owner, spender common.Address) (*big.Int, error) {
+	erc20ABI, err := abi.JSON(strings.NewReader(`[{"constant":true,"inputs":[{"name":"_owner","type":"address"},{"name":"_spender","type":"address"}],"name":"allowance","outputs":[{"name":"","type":"uint256"}],"payable":false,"stateMutability":"view","type":"function"}]`))
+	if err != nil {
+		return nil, err
+	}
+	calldata, err := erc20ABI.Pack("allowance", owner, spender)
+	if err != nil {
+		return nil, err
+	}
+
+	result, err := client.CallContract(context.Background(), ethereum.CallMsg{
+		To:   &token,
+		Data: calldata,
+	}, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return new(big.Int).SetBytes(result), nil
+}
+
+// sendDynamicTx 动态估算 Gas 并发送交易
+func (l *TransactionLogic) sendDynamicTx(client *ethclient.Client, privateKey *ecdsa.PrivateKey, to *common.Address, value *big.Int, calldata []byte, chainConfig *config.ChainConf) (string, error) {
+	fromAddr := crypto.PubkeyToAddress(privateKey.PublicKey)
+
+	// 1. 获取 Nonce
+	nonce, err := client.PendingNonceAt(context.Background(), fromAddr)
+	if err != nil {
+		return "", fmt.Errorf("failed to get nonce: %v", err)
+	}
+
+	// 2. 获取 Gas Price
+	gasPrice, err := client.SuggestGasPrice(context.Background())
+	if err != nil {
+		return "", fmt.Errorf("failed to get gas price: %v", err)
+	}
+
+	// 3. 估算 Gas Limit
+	gasLimit, err := client.EstimateGas(context.Background(), ethereum.CallMsg{
+		From:  fromAddr,
+		To:    to,
+		Value: value,
+		Data:  calldata,
+	})
+	if err != nil {
+		l.Infof("Gas 估算失败，将使用默认值 500000: %v", err)
+		gasLimit = 500000 // 如果估算失败，给一个较高的默认值
+	} else {
+		gasLimit = gasLimit * 12 / 10 // 在估算结果上增加 20% buffer
+	}
+
+	// 4. 构建、签名并发送交易
+	tx := evmTypes.NewTx(&evmTypes.LegacyTx{
+		Nonce:    nonce,
+		To:       to,
+		Value:    value,
+		Gas:      gasLimit,
+		GasPrice: gasPrice,
+		Data:     calldata,
+	})
+
+	signedTx, err := evmTypes.SignTx(tx, evmTypes.NewEIP155Signer(big.NewInt(chainConfig.ChainId)), privateKey)
+	if err != nil {
+		return "", fmt.Errorf("failed to sign transaction: %v", err)
+	}
+
+	if err := client.SendTransaction(context.Background(), signedTx); err != nil {
+		return "", fmt.Errorf("failed to send transaction: %v", err)
+	}
+
+	txHash := signedTx.Hash().Hex()
+	l.Infof("交易已发送, Hash: %s", txHash)
+	return txHash, nil
+}
+
+// waitForTransaction 等待交易确认
+func (l *TransactionLogic) waitForTransaction(client *ethclient.Client, txHash common.Hash) (*evmTypes.Receipt, error) {
+	for {
+		receipt, err := client.TransactionReceipt(context.Background(), txHash)
+		if err == ethereum.NotFound {
+			time.Sleep(2 * time.Second) // 每 2 秒查询一次
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		return receipt, nil
+	}
 }

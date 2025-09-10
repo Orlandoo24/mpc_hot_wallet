@@ -1,13 +1,17 @@
 <component name="ProjectDictionaryState">
   <dictionary name="project">
     <words>
+      <w>arbitrum</w>
+      <w>goerli</w>
       <w>hashlink</w>
       <w>jiaru</w>
       <w>lifi</w>
       <w>publicnode</w>
       <w>secp</w>
+      <w>sepolia</w>
       <w>sslmode</w>
       <w>testdb</w>
+      <w>wbnb</w>
     </words>
   </dictionary>
 </component>
