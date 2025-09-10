@@ -715,16 +715,16 @@ func (l *TransactionLogic) buildAndSendBTCTransaction(req *types.TransactionReq,
 		inputs = append(inputs, txIn)
 		inputUtxos = append(inputUtxos, utxo)
 
-		l.Infof("当前输入总额: %d satoshi, 需要: %d satoshi (含矿工费 5000)", inputSum, amount+5000)
-		if inputSum >= amount+5000 { // 预留 5000 satoshi 作为矿工费
+		l.Infof("当前输入总额: %d satoshi, 需要: %d satoshi (含矿工费 1000)", inputSum, amount+1000)
+		if inputSum >= amount+1000 { // 预留 1000 satoshi 作为矿工费
 			l.Infof("✅ UTXO 选择完成，选择了 %d 个 UTXO", len(inputs))
 			break
 		}
 	}
 
-	if inputSum < amount+5000 {
-		l.Errorf("余额不足: 需要 %d satoshi，可用 %d satoshi", amount+5000, inputSum)
-		return "", fmt.Errorf("insufficient funds: need %d, available %d", amount+5000, inputSum)
+	if inputSum < amount+1000 {
+		l.Errorf("余额不足: 需要 %d satoshi，可用 %d satoshi", amount+1000, inputSum)
+		return "", fmt.Errorf("insufficient funds: need %d, available %d", amount+1000, inputSum)
 	}
 
 	// 5. 构建交易
@@ -751,8 +751,8 @@ func (l *TransactionLogic) buildAndSendBTCTransaction(req *types.TransactionReq,
 	l.Infof("接收地址输出: %d satoshi", amount)
 
 	// 添加找零输出
-	changeAmount := inputSum - amount - 5000 // 减去转账金额和矿工费
-	l.Infof("计算找零: %d - %d - 5000 = %d satoshi", inputSum, amount, changeAmount)
+	changeAmount := inputSum - amount - 1000 // 减去转账金额和矿工费
+	l.Infof("计算找零: %d - %d - 1000 = %d satoshi", inputSum, amount, changeAmount)
 	if changeAmount > 0 {
 		changeScript, err := txscript.PayToAddrScript(sourceAddr)
 		if err != nil {
