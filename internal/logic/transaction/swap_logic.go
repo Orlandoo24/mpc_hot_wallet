@@ -338,8 +338,7 @@ func (l *TransactionLogic) executeSwapTransaction(client *ethclient.Client, priv
 		}
 	}
 
-	l.Infof("交易参数: to=%s, value=%s, gasLimit=%d, gasPrice=%s",
-		to.Hex(), value.String(), gasLimit, gasPrice.String())
+	l.Infof("交易参数: to=%s, value=%s, gasLimit=%d, gasPrice=%s", to.Hex(), value.String(), gasLimit, gasPrice.String())
 
 	// 使用通用函数构建并发送交易
 	return l.BuildAndSendTransaction(client, privateKey, to, value, data, gasLimit, gasPrice, chainId)

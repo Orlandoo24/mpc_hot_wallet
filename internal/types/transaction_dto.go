@@ -31,30 +31,31 @@ type LifiToken struct {
 
 // LifiGasCost LI.FI API 中的 Gas 费用信息
 type LifiGasCost struct {
-	Type     string    `json:"type"`
-	Price    string    `json:"price"`
-	Estimate string    `json:"estimate"`
-	Limit    string    `json:"limit"`
-	Token    LifiToken `json:"token"` // 修改为对象类型
+	Type     string    `json:"type"`     // Gas 费用类型，如 "SEND"、"APPROVE" 等
+	Price    string    `json:"price"`    // Gas 价格，单位为 wei，如 "5000000000" (5 Gwei)
+	Estimate string    `json:"estimate"` // 预估 Gas 用量，如 "180000"
+	Limit    string    `json:"limit"`    // Gas 限制上限，如 "216000"
+	Token    LifiToken `json:"token"`    // 支付 Gas 费用的代币信息（通常是原生代币）
 }
 
+// LifiQuoteResponse LI.FI 最优路径和 gas 、滑点 建议 resp
 type LifiQuoteResponse struct {
-	ID       string `json:"id"`
-	Type     string `json:"type"`
-	Tool     string `json:"tool"`
+	ID       string `json:"id"`   // LI.FI 报价的唯一标识符
+	Type     string `json:"type"` // 报价类型，如 "lifi"
+	Tool     string `json:"tool"` // 使用的 DEX 工具名称，如 "1inch"、"pancakeswap"、"paraswap"
 	Estimate struct {
-		FromAmount      string        `json:"fromAmount"`
-		ToAmount        string        `json:"toAmount"`
-		ToAmountMin     string        `json:"toAmountMin"`
-		ApprovalAddress string        `json:"approvalAddress"`
-		GasCosts        []LifiGasCost `json:"gasCosts"` // 使用新的结构体
+		FromAmount      string        `json:"fromAmount"`      // 输入代币数量，如 "1000000000000000000" (1 ETH)
+		ToAmount        string        `json:"toAmount"`        // 预期输出代币数量
+		ToAmountMin     string        `json:"toAmountMin"`     // 考虑滑点后的最小输出数量
+		ApprovalAddress string        `json:"approvalAddress"` // 需要授权的合约地址（ERC20 代币需要）
+		GasCosts        []LifiGasCost `json:"gasCosts"`        // Gas 费用估算详情数组
 	} `json:"estimate"`
 	TransactionRequest struct {
-		Data     string `json:"data"`
-		To       string `json:"to"`
-		Value    string `json:"value"`
-		GasLimit string `json:"gasLimit"`
-		GasPrice string `json:"gasPrice"`
+		Data     string `json:"data"`     // 包含最优路径的完整交易调用数据（ABI 编码）
+		To       string `json:"to"`       // 交易目标合约地址（聚合器或 DEX 合约）
+		Value    string `json:"value"`    // 交易发送的原生代币数量（wei 单位）
+		GasLimit string `json:"gasLimit"` // LI.FI 优化建议的 Gas 限制
+		GasPrice string `json:"gasPrice"` // LI.FI 优化建议的 Gas 价格（wei 单位）
 	} `json:"transactionRequest"`
 }
 
