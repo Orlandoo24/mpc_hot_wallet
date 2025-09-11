@@ -1183,7 +1183,7 @@ func (l *TransactionLogic) handleEVMTestnetSwap(req *types.TransactionReq) (*typ
 		return nil, err
 	}
 
-	// 执行包含 approve 逻辑的完整 swap 流程
+	// evm 测试网执行包含 approve 逻辑的完整 swap 流程
 	txHash, err := l.executeEVMTestnetSwapNative(client, privateKey, req, &chainConfig)
 	if err != nil {
 		l.Errorf("EVM 测试网 swap 交易失败: %v", err)
@@ -1306,6 +1306,8 @@ func (l *TransactionLogic) executeEVMTestnetSwapNative(client *ethclient.Client,
 	if err != nil {
 		return "", fmt.Errorf("failed to parse router ABI: %v", err)
 	}
+
+	l.Infof("从 PancakeSwap V2 Router ABI 中解析出所有需要的函数...")
 
 	var calldata []byte
 	switch swapFunction {
