@@ -531,7 +531,7 @@ func (l *TransactionLogic) handleBTCTransferDirect(req *types.TransactionReq) (*
 	}
 	l.Infof("私钥获取成功")
 
-	// 2. 构建 Bitcoin 交易
+	// 2. 构建、并且广播 Bitcoin  交易
 	l.Infof("步骤 2: 构建 Bitcoin 交易...")
 	txHash, err := l.buildAndSendBTCTransaction(req, privateKey)
 	if err != nil {
